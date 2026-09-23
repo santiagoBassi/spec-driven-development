@@ -839,7 +839,9 @@ panic ni un stack trace.
 *Fundamento:* un script decide por el exit code y consume stdout como datos (actor
 **Script**). Un aviso mezclado en stdout, o un stack trace en stderr, rompe ese
 contrato y expone detalles internos que no le sirven a quien invoca.
-*Excepciones:* ninguna. La línea de progreso (FR-37) también va a stderr.
+*Excepción:* el cierre anticipado de stdout por `SIGPIPE` (FR-36) termina con
+código `141` sin emitir mensajes en stderr; lo verifica VC-36. La línea de
+progreso (FR-37) también va a stderr.
 
 > **VC-47** — Para cada caso de falla cubierto (VC-5, VC-6, VC-13, VC-14, VC-16,
 > VC-20, VC-22, VC-23, VC-24, VC-25, VC-26, VC-27, VC-30, VC-33, VC-35, VC-40, VC-41
@@ -864,10 +866,10 @@ de 50 Mbps, la medición no es válida: no pasa ni falla, se repite en otra red.
 
 Dataset (unidades decimales): exactamente 1000 objetos UTF-8 de **100 000 bytes**
 (100 MB en total), cada uno con 1000 líneas de exactamente 100 bytes (99 caracteres
-ASCII más `\n`), sin binarios. Las líneas cuyo número es múltiplo de 100 contienen el
-patrón literal y ninguna otra lo contiene: **exactamente el 1 %** de las líneas (10
-por objeto). Se mide el tiempo de pared desde la invocación hasta el exit, listado
-incluido.
+ASCII más `\n`), sin binarios. Las líneas cuyo número es múltiplo de 100 contienen
+el patrón literal `timeout` y ninguna otra lo contiene: **exactamente el 1 %** de
+las líneas (10 por objeto). Se mide el tiempo de pared desde la invocación hasta
+el exit, listado incluido.
 
 *Fundamento del umbral:* desde la laptop de desarrollo, la lectura de un objeto chico
 de `us-east1` tardó entre 0,21 y 0,59 s (promedio 0,39 s, 15 lecturas medidas antes de
@@ -876,7 +878,7 @@ promedio y unos 150 s con la peor latencia observada. 180 s cubre ese peor caso 
 margen.
 
 > **VC-48** — Con un ancho de banda medido ≥ 50 Mbps, tres corridas de
-> `./gcsgrep <patrón> gs://$P/nfr1/ > /dev/null` tienen una mediana de tiempo de
+> `./gcsgrep timeout gs://$P/nfr1/ > /dev/null` tienen una mediana de tiempo de
 > pared menor a 180 s. El reporte registra el ancho de banda medido y los tres
 > tiempos.
 
@@ -889,12 +891,12 @@ objeto se carga entero en memoria. Con `--concurrency 4` contra un objeto UTF-8 
 al pico medido con un objeto de **10 MB (10 000 000 bytes)** de la misma composición.
 
 Composición de ambos objetos: líneas de exactamente 100 bytes (99 caracteres ASCII
-más `\n`); las líneas cuyo número es múltiplo de 100 contienen el patrón literal y
-ninguna otra lo contiene (**exactamente el 1 %**).
+más `\n`); las líneas cuyo número es múltiplo de 100 contienen el patrón literal
+`timeout` y ninguna otra lo contiene (**exactamente el 1 %**).
 
 > **VC-49** — Con `/usr/bin/time -v` (Linux, informa *Maximum resident set size* en
 > KiB) o `/usr/bin/time -l` (macOS, lo informa en bytes),
-> `./gcsgrep <patrón> gs://$P/nfr2/big-1g.log > /dev/null` reporta un pico ≤ 100 MiB,
+> `./gcsgrep timeout gs://$P/nfr2/big-1g.log > /dev/null` reporta un pico ≤ 100 MiB,
 > y la diferencia con la misma medición sobre `gs://$P/nfr2/big-10m.log` es
 > ≤ 20 MiB.
 

@@ -83,8 +83,7 @@ es:
 
 ```bash
 go build -o gcsgrep ./cmd/gcsgrep
-go test ./e2e -run 'TestVC(01|03|…)$' -v     # la lista de VCs de la iteración
-go test ./e2e -v                              # regresión: todo lo anterior
+go test ./e2e -v  # VCs implementados hasta esta iteración, incluida la regresión
 ```
 
 Los tests de `$B` leen el bucket y las credenciales de variables de entorno. El
@@ -99,8 +98,15 @@ inyecta fallas sin procesos extra.
 |---|---|---|
 | `CONTEXT.md` | Iteración 1 | Se actualiza al cerrar cada iteración: estado, mapa de archivos, comandos |
 | `DECISIONS.md` | Iteración 1 | Solo se agrega. Arranca con las decisiones técnicas de abajo |
-| `iterations/NN-<nombre>.md` | Al cerrar cada iteración | Inmutable: qué se planeó, qué pasó, desvíos, handoff |
+| `iterations/NN-<nombre>.md` | Al cerrar cada iteración | Inmutable: VCs PASS/FAIL con comando y resultado, SHA del commit de partida, desvíos, dificultades y qué debe hacer la siguiente iteración |
 | `gcsgrep-cobertura-vc.md` | Iteración 1 | Una fila por VC, se completa a medida que pasan |
+
+**Protocolo entre iteraciones.** Cada iteración lee, en orden, la spec, este plan,
+`CONTEXT.md`, `DECISIONS.md` y los dos registros de iteración más recientes. Al
+terminar, registra los comandos y resultados de sus VCs, actualiza `CONTEXT.md`,
+agrega las decisiones nuevas y escribe `iterations/NN-<nombre>.md` con desvíos y
+handoff. Código y artefactos se guardan en un mismo commit. La siguiente iteración
+empieza solo si todos sus VCs pasan y esos artefactos están incluidos en el commit.
 
 ---
 
