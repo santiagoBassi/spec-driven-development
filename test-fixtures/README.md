@@ -17,6 +17,7 @@ reglas de negocio y casos borde de `gcsgrep`.
 | `data/config.json` | Archivo JSON multilínea con claves de configuración (`timeout_seconds`) |
 | `data/windows_crlf.txt` | Texto con saltos de línea Windows (`\r\n`) para verificar recorte de `\r` (FR-a) |
 | `data/subdata/deep_nested.txt` | Archivo anidado en subdirectorio profundo para probar búsqueda recursiva |
+| `data/acentos.log` | Única línea `ÑANDÚ ÁRBOL`, para probar `-i` con letras no ASCII (FR-7) |
 | `edge-cases/empty.txt` | Archivo de 0 bytes (no debe romper el procesamiento ni conteos) |
 | `edge-cases/binary_nullbyte.bin` | Archivo binario con bytes nulos (`0x00`) para verificar sniffing de BR-d |
 | `edge-cases/sample_image.png` | Archivo PNG binario real para verificar omisión con aviso |

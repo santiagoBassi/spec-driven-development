@@ -1,7 +1,10 @@
 # gcsgrep — spec
 
 > **Estado: revisada.** Pasó el gate de revisión de
-> [`docs/guia-sdd.md`](./docs/guia-sdd.md) sin preguntas abiertas.
+> [`docs/guia-sdd.md`](./docs/guia-sdd.md) sin preguntas abiertas. Revisada de nuevo
+> tras ajustar el entorno de verificación a un único bucket de fixtures, un bucket de
+> performance y ningún bucket sin acceso, y el umbral de NFR-1 a la región del bucket.
+> Ningún FR ni BR cambió.
 > Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md).
 >
 > Regla estructural: **cada FR, cada BR y cada NFR tiene un VC, y cada VC corresponde
@@ -77,10 +80,11 @@ spec.
   util-linux.
 - **Identidades.** Se usan como ADC al ejecutar los VCs.
   - `lectora`: una service account con **solo** `roles/storage.objectViewer` sobre
-    `$B` y ningún permiso sobre `$B2`. Todos los VCs contra `$B` corren con esta
-    identidad.
-  - `admin-b2`: una service account con `roles/storage.objectViewer` sobre `$B2`.
-- **Bucket de fixtures `$B`.** Contiene exactamente las carpetas `logs/`, `data/`,
+    `$B`. Todos los VCs contra `$B` corren con esta identidad.
+  - `sin-acceso`: una service account del mismo proyecto sin ningún rol sobre `$B`.
+    `$B` no es público (tiene *public access prevention* activado), así que GCS le
+    niega a esta identidad el listado y la lectura.
+- **Bucket de fixtures `$B`.** Bucket regional Standard en `us-east1`. Contiene exactamente las carpetas `logs/`, `data/`,
   `edge-cases/` y `sniffing/` de [`test-fixtures/`](./test-fixtures/README.md), sin
   el `README.md` (que contiene `timeout` y alteraría los resultados). Se suben como
   indica ese README; los objetos de `sniffing/` necesitan metadata especial:
@@ -94,9 +98,9 @@ spec.
   | `sniffing/gzip_no_extension` | Un gzip real (magic bytes `1f 8b`), sin extensión | El gzip se detecta por contenido (BR-7) |
   | `sniffing/transcoded.log` | `sniff transcoded\n`, comprimido antes de subirlo con `Content-Encoding: gzip` y sin `Cache-Control: no-transform` | Decompressive transcoding de GCS (BR-7) |
 
-- **Bucket sin acceso `$B2`.** Contiene un único objeto, `nota.txt`, cuya única línea
-  es `timeout b2`.
-- **Bucket de performance `$P`.** Dataset de NFR-1 bajo `gs://$P/nfr1/`, objetos de
+- **Bucket de performance `$P`.** Un bucket distinto de `$B`, regional Standard en
+  `us-east1`, para que sus objetos no alteren los VCs que buscan en la raíz de `$B`.
+  Dataset de NFR-1 bajo `gs://$P/nfr1/`, objetos de
   NFR-2 bajo `gs://$P/nfr2/`, con la composición que fija cada NFR, y el objeto
   `gs://$P/bw/100mb.bin` (100 000 000 bytes) para medir el ancho de banda de NFR-1.
 - **Servidor de prueba.** Un servidor HTTP local que emula el subconjunto de la API
@@ -108,13 +112,17 @@ spec.
   y no responder nunca, o enviar el cuerpo en tramos espaciados. Los VCs
   contra este servidor corren con ADC válidas (por ejemplo, `lectora`): la
   herramienta las exige siempre (FR-35), aunque el servidor no las valide.
+- **Listener de conexiones.** Un proceso que escucha en un puerto TCP local, registra
+  cada conexión entrante y no responde nada (por ejemplo,
+  `nc -lk 127.0.0.1 9999 > conexiones.txt`). Sirve para observar que la herramienta no
+  inició ninguna conexión hacia GCS.
 - **Entorno sin ADC.** `env -u GOOGLE_APPLICATION_CREDENTIALS HOME=$(mktemp -d)
   CLOUDSDK_CONFIG=$(mktemp -d)`, en una máquina fuera de GCP (sin metadata server).
 - **Chequeo P (precedencia).** Donde un VC dice "cumple el chequeo P", el comando se
-  repite en el entorno sin ADC con `STORAGE_EMULATOR_HOST` apuntando al servidor de
-  prueba, y se verifica que (1) el mensaje de stderr es el del error de uso
-  esperado, no el de credenciales ausentes, y (2) el servidor de prueba registra
-  **cero** requests. Así se observa que el error se detecta antes de autenticar y de
+  repite en el entorno sin ADC con `STORAGE_EMULATOR_HOST` apuntando al listener de
+  conexiones, y se verifica que (1) el mensaje de stderr es el del error de uso
+  esperado, no el de credenciales ausentes, y (2) el listener no registra
+  **ninguna** conexión. Así se observa que el error se detecta antes de autenticar y de
   cualquier operación contra GCS.
 
 Convenciones: "stdout exacto" compara el conjunto de líneas sin importar el orden
@@ -211,9 +219,9 @@ matchean.
 
 > **VC-7** — `./gcsgrep -i timeout gs://$B/logs/app/api.log` sale con código `0` e
 > imprime 4 líneas (las que contienen `timeout`, `TIMEOUT` y `Timeout`). Sin `-i`, el
-> mismo comando imprime 2. Contra el servidor de prueba, con `fake/acentos.log` cuya
-> única línea es `ÑANDÚ ÁRBOL`, `LANG=C ./gcsgrep -i 'ñandú árbol' gs://fake/acentos.log`
-> sale con código `0` e imprime esa línea; sin `-i`, sale con código `1`.
+> mismo comando imprime 2. `LANG=C ./gcsgrep -i 'ñandú árbol' gs://$B/data/acentos.log`
+> (cuya única línea es `ÑANDÚ ÁRBOL`) sale con código `0` e imprime esa línea; sin
+> `-i`, sale con código `1`.
 
 #### FR-8 · Numerar líneas con `-n`
 
@@ -606,9 +614,9 @@ por stderr, antes de cualquier operación contra GCS. La verificación se hace s
 aunque esté definido `STORAGE_EMULATOR_HOST`.
 
 > **VC-35** — En el entorno sin ADC, con `STORAGE_EMULATOR_HOST` apuntando al
-> servidor de prueba, `./gcsgrep timeout gs://fake/` sale con código `2`, stdout
-> vacío, stderr es exactamente el mensaje de arriba, y el servidor registra cero
-> requests.
+> listener de conexiones, `./gcsgrep timeout gs://$B/logs/` sale con código `2`,
+> stdout vacío, stderr es exactamente el mensaje de arriba, y el listener no registra
+> ninguna conexión.
 
 #### FR-36 · Terminar en silencio si se cierra stdout
 
@@ -681,12 +689,13 @@ niega es la lectura de un objeto listado, ese objeto falla según FR-29.
 de escalamiento de privilegios.
 *Excepciones:* ninguna.
 
-> **VC-40** — Con ADC = `lectora`, `./gcsgrep timeout gs://$B2/` sale con código `2`,
-> stdout vacío, y stderr es exactamente `gcsgrep: access denied: gs://$B2/`. Con
-> ADC = `lectora`, `./gcsgrep timeout gs://$B2/nota.txt` sale con código `2` y stderr
-> es exactamente `gcsgrep: access denied: gs://$B2/nota.txt`. Con ADC = `admin-b2`,
-> `./gcsgrep timeout gs://$B2/` sale con código `0` y su
-> stdout es exactamente `gs://$B2/nota.txt:timeout b2`.
+> **VC-40** — Con ADC = `sin-acceso`, `./gcsgrep timeout gs://$B/logs/app/` sale con
+> código `2`, stdout vacío, y stderr es exactamente
+> `gcsgrep: access denied: gs://$B/logs/app/`. Con ADC = `sin-acceso`,
+> `./gcsgrep timeout gs://$B/logs/app/api.log` sale con código `2` y stderr es
+> exactamente `gcsgrep: access denied: gs://$B/logs/app/api.log`. Con ADC = `lectora`,
+> `./gcsgrep timeout gs://$B/logs/app/` sale con código `0` y su stdout es
+> exactamente el de VC-1.
 
 ### BR-3 · Tope de objetos listados
 
@@ -834,10 +843,10 @@ contrato y expone detalles internos que no le sirven a quien invoca.
 ### NFR-1 · Rendimiento con 1000 objetos
 
 Con `--concurrency 4` (default), gcsgrep procesa 1000 objetos de texto en **menos de
-120 segundos**.
+180 segundos**.
 
-Condiciones: desde la laptop de desarrollo contra un bucket en la región de GCS más
-cercana, con un ancho de banda de bajada medido de **al menos 50 Mbps**. El ancho de
+Condiciones: desde la laptop de desarrollo, en Argentina, contra `$P` en `us-east1`
+(región del free tier de GCS), con un ancho de banda de bajada medido de **al menos 50 Mbps**. El ancho de
 banda se mide inmediatamente antes de las corridas, bajando `gs://$P/bw/100mb.bin`
 con `gcloud storage cp` a `/dev/null` (100 000 000 bytes × 8 / segundos). Si da menos
 de 50 Mbps, la medición no es válida: no pasa ni falla, se repite en otra red.
@@ -849,9 +858,15 @@ patrón literal y ninguna otra lo contiene: **exactamente el 1 %** de las línea
 por objeto). Se mide el tiempo de pared desde la invocación hasta el exit, listado
 incluido.
 
+*Fundamento del umbral:* desde la laptop de desarrollo, la lectura de un objeto chico
+de `us-east1` tardó entre 0,21 y 0,59 s (promedio 0,39 s, 15 lecturas medidas antes de
+implementar). 1000 objetos con 4 lecturas simultáneas son 250 turnos: unos 100 s en
+promedio y unos 150 s con la peor latencia observada. 180 s cubre ese peor caso con
+margen.
+
 > **VC-48** — Con un ancho de banda medido ≥ 50 Mbps, tres corridas de
 > `./gcsgrep <patrón> gs://$P/nfr1/ > /dev/null` tienen una mediana de tiempo de
-> pared menor a 120 s. El reporte registra el ancho de banda medido y los tres
+> pared menor a 180 s. El reporte registra el ancho de banda medido y los tres
 > tiempos.
 
 ### NFR-2 · Memoria acotada con objetos grandes
