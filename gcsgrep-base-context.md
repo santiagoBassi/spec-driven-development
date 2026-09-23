@@ -45,7 +45,8 @@ puntual. Flags `-E`, `-i`, `-n`, `-c` y `-l`, más `--max` (guardrail) y
 - No es un clon de `grep`: `-v`, `-r`, `--include` y contexto quedan diferidos.
 - No es un gestor de GCS: no copia, no mueve, no borra, no cambia permisos.
 - Solo CLI y solo GCS. S3 y Azure quedan afuera, sin cerrarles la puerta.
-- Sin JSON, sin color, sin descompresión de `.gz`, sin encodings distintos de UTF-8.
+- Sin JSON, sin color, sin descompresión de `.gz` ni conversión de codificaciones
+  distintas de UTF-8.
 
 **Restricciones**
 - **Solo lectura**, siempre.
@@ -64,9 +65,11 @@ un typo no cuesta una llamada.
 - Bucket inexistente, objeto puntual inexistente o sin credenciales: error (exit 2).
 - Un objeto ilegible no tira abajo la corrida: se avisa, se sigue con el resto y el
   exit final es 2, para que un script sepa que el resultado puede estar incompleto.
-- Objeto binario: se saltea con un aviso, no cuenta como fallo.
-- Línea gigante (un log de una sola línea de cientos de MB): se busca e imprime
-  truncada, pero el match se reporta.
+- Objeto clasificado como no-texto: se saltea con un aviso, no cuenta como fallo.
+- Línea gigante (un log de una sola línea de cientos de MB): se busca en toda la
+  línea, pero se conserva para imprimir solo su primer MiB. Un match posterior a
+  ese límite también se reporta, aunque el texto que matcheó no sea visible en
+  la salida truncada.
 - Un objeto que cambia mientras se lee: no se controla en la v1.
 
 ---
@@ -129,7 +132,7 @@ procesarlo. JSON y color son diferidos.
 | Código | Significado |
 |---|---|
 | `0` | Hubo al menos un match |
-| `1` | No hubo ningún match (incluye un prefijo vacío o solo binarios) |
+| `1` | No hubo ningún match (incluye un prefijo vacío o solo objetos clasificados como no-texto) |
 | `2` | Error: de uso, de credenciales, de listado, guardrail disparado, o algún objeto que falló al leerse |
 
 Trade-off aceptado: si un objeto falla y otros matchean, el exit es 2 aunque haya
@@ -149,7 +152,8 @@ Consecuencias aceptadas:
   saltea sin una regla aparte por extensión.
 - Si el objeto tiene `Content-Encoding: gzip`, GCS lo sirve ya descomprimido y se
   busca como texto. Es comportamiento de GCS y lo aceptamos.
-- Un archivo en Latin-1 es legible para un humano pero se saltea.
+- Un archivo en Latin-1 con bytes no válidos en UTF-8 dentro de la muestra se
+  saltea; si aparecen solo después, se procesa sin convertir esos bytes.
 
 | Opción | Por qué no |
 |---|---|
@@ -223,8 +227,9 @@ cli       → parsea argv, valida flags/patrón/ubicación, traduce errores a ex
 location  → interpreta gs://bucket/[ruta] y decide el modo (bucket, prefijo, objeto)
 gcs       → autenticación ADC, listar con tope, consultar y leer objetos en streaming
 sniff     → clasifica texto / no-texto con los primeros 512 bytes
-search    → parte el stream en líneas (con tope por línea) y aplica el matcher
-output    → escribe líneas completas a stdout, avisos y progreso a stderr
+search    → delimita líneas en el stream, busca en cada una completa y retiene
+            como máximo su primer MiB para la salida
+output    → escribe registros completos a stdout, avisos y progreso a stderr
 ```
 
 Dependencias: `cli` orquesta; `search` y `sniff` no saben que existe GCS (reciben
@@ -250,8 +255,9 @@ argv → cli (valida, sin tocar GCS)
   autenticar. La primera llamada a GCS pasa recién cuando la invocación es válida.
 - **Listar vs. leer.** Son fases separadas: el guardrail y el total del progreso
   dependen de que el listado termine antes de la primera lectura.
-- **Streaming.** Ningún módulo tiene un objeto completo en memoria; lo máximo que se
-  retiene es una línea, con tope.
+- **Streaming.** Ningún módulo tiene un objeto completo en memoria. Cada línea se
+  busca completa sin retenerla entera; para la salida se conserva como máximo
+  su primer MiB.
 
 ### Actores
 
@@ -268,7 +274,9 @@ argv → cli (valida, sin tocar GCS)
   siendo caros. Decisión consciente; el límite por bytes queda diferido.
 - **Objetos que cambian durante la lectura.** Se lee lo que haya al abrir el stream,
   sin fijar la generación.
-- **Encodings.** Todo lo que no sea UTF-8 se trata como binario.
+- **Encodings.** Solo se valida como UTF-8 la muestra inicial de hasta 512 bytes.
+  Los bytes inválidos posteriores no cambian la clasificación y se imprimen sin
+  conversión.
 - **Transcoding de GCS.** Un objeto con `Content-Encoding: gzip` se busca
   descomprimido, aunque un `.gz` normal se saltee.
 

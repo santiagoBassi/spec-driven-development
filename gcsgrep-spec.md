@@ -29,8 +29,8 @@ bajarlos a disco, sin escribir nada en GCS y sin ampliar sus permisos.
 - Flags `-E`, `-i`, `-n`, `-c`, `-l`, `--max` y `--concurrency`.
 - Ubicaciones `gs://bucket/`, `gs://bucket/prefijo/` (recursivas) y
   `gs://bucket/objeto` (objeto puntual).
-- Lectura por streaming de objetos de texto UTF-8; los objetos que no son texto se
-  saltean.
+- Lectura por streaming de objetos clasificados como texto según BR-6; los
+  clasificados como no-texto se saltean.
 - Autenticación solo por ADC (Application Default Credentials).
 - Guardrail de costo por cantidad de objetos listados.
 - Exit codes estilo `grep` (0 / 1 / 2), aptos para scripting.
@@ -47,7 +47,8 @@ Cada uno de estos es una decisión tomada, no un olvido:
 - Salida en JSON o con color.
 - Autenticación con un archivo de service account pasado por flag.
 - Descomprimir `.gz` al vuelo. Un objeto gzip se saltea como no-texto (BR-7).
-- Codificaciones distintas de UTF-8 (Latin-1 y similares se tratan como no-texto).
+- Interpretar o convertir codificaciones distintas de UTF-8. La clasificación
+  usa solo la muestra de BR-6: bytes inválidos posteriores no la cambian.
 - Un límite por **bytes** leídos. El guardrail solo cuenta objetos (BR-3).
 - Reintentos automáticos y timeout configurable.
 - **Consistencia ante objetos que cambian durante la lectura.** Se lee lo que haya al
@@ -311,8 +312,9 @@ sigue al bucket,
 
 > **VC-14** — Para cada una de `logs/`, `s3://$B/`, `gs://`, `gs:///logs/` y
 > `gs://$B`, `./gcsgrep timeout <ubicación>` sale con código `2`, stdout vacío, y la
-> primera línea de stderr empieza con `gcsgrep: invalid location: `. Cada caso cumple
-> el chequeo P.
+> única línea de stderr es exactamente `gcsgrep: invalid location: "<ubicación>"`,
+> con `<ubicación>` reemplazada por el argumento recibido. Cada caso cumple el
+> chequeo P.
 
 #### FR-15 · Aceptar un bucket o prefijo sin objetos
 
@@ -353,6 +355,9 @@ de BR-3, porque el listado los devuelve.
 > servidor no registra ninguna lectura de contenido de `dir/`.
 > `./gcsgrep --max 1 timeout gs://fake/` sale con código `2` con el mensaje de BR-3
 > para `1`.
+> Con el mismo servidor, `script -q -c "./gcsgrep -c timeout gs://fake/" out.txt`
+> captura el progreso en una pseudo-terminal: `out.txt` contiene
+> `1/1 objects processed` y no contiene ningún progreso cuyo total sea `2`.
 
 ### Formatos de salida
 
@@ -773,7 +778,8 @@ extensión ni el content-type.
 *Fundamento:* el content-type es metadata que el uploader pudo poner mal o no poner;
 el contenido es la única fuente confiable.
 *Excepciones:* ninguna.
-*Limitación conocida:* solo UTF-8 (ASCII incluido) cuenta como texto.
+*Limitación conocida:* solo se valida como UTF-8 la muestra inicial; bytes
+inválidos posteriores no cambian la clasificación.
 
 > **VC-44** — `./gcsgrep sniff gs://$B/sniffing/` imprime líneas de
 > `utf8_split_at_512.txt` (incluida `sniff after`), `invalid_after_512.txt` y
@@ -801,23 +807,28 @@ sirve descomprimido (*decompressive transcoding*). Para ello no debe tener
 > `./gcsgrep sniff gs://$B/sniffing/` escribe el mismo aviso para
 > `gzip_no_extension` e imprime `gs://$B/sniffing/transcoded.log:sniff transcoded`.
 
-### BR-8 · Línea de más de 1 MB
+### BR-8 · Búsqueda en líneas de más de 1 MiB
 
-Si una línea supera **1 MB (1 048 576 bytes)**, solo se busca en su primer MB; el
-resto no se analiza. Si hay match en esa porción, se imprime esa porción seguida de
-`...`.
+Se busca en la **línea completa**, aunque supere **1 MiB (1 048 576 bytes)**.
+Si una línea de más de 1 MiB tiene un match en cualquier posición, se imprime
+solo su primer MiB seguido de `...`. Esto también se aplica cuando el match está
+después del primer MiB: la línea se reporta aunque el texto que matcheó no sea
+visible en la salida truncada.
 
-*Fundamento:* para imprimir una línea hay que tenerla entera en un buffer. Sin tope,
-una línea de cientos de MB rompería la memoria acotada de NFR-2. Truncar conserva la
-señal del match, que es más útil que descartar el objeto.
+*Fundamento:* buscar una línea completa no requiere conservarla entera en memoria,
+pero imprimirla sí. Retener solo el primer MiB para la salida respeta la memoria
+acotada de NFR-2 sin perder matches posteriores al límite.
 *Excepciones:* ninguna.
 
 > **VC-46** — `./gcsgrep timeout=early gs://$B/edge-cases/long_line_exceeds_1mb.log`
-> sale con código `0` e imprime una sola línea: el prefijo
-> `gs://$B/edge-cases/long_line_exceeds_1mb.log:`, luego exactamente los primeros
-> 1 048 576 bytes de la línea 1 y luego `...`.
-> `./gcsgrep timeout=late gs://$B/edge-cases/long_line_exceeds_1mb.log` (el texto está
-> en el byte 1 099 837 de la línea) sale con código `1`.
+> y `./gcsgrep timeout=late gs://$B/edge-cases/long_line_exceeds_1mb.log` (el segundo
+> patrón empieza en el byte 1 099 838 de la línea 1, contando desde 1) salen con
+> código `0` e imprimen exactamente la misma línea: el prefijo
+> `gs://$B/edge-cases/long_line_exceeds_1mb.log:`, luego los primeros 1 048 576
+> bytes de la línea 1 y finalmente `...`.
+> `./gcsgrep -E 'timeout=early.*timeout=late' gs://$B/edge-cases/long_line_exceeds_1mb.log`
+> también sale con código `0` e imprime esa misma línea: la regex debe poder
+> matchear a ambos lados del límite de salida.
 
 ### BR-9 · Salida apta para scripting
 

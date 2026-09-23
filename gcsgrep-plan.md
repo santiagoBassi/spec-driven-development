@@ -70,8 +70,9 @@ internal/cli/       parseo de argv y validación (sin tocar GCS)
 internal/location/  gs://bucket/[ruta] → modo bucket / prefijo / objeto
 internal/gcs/       ADC, listado con tope, metadata y lectura por streaming
 internal/sniff/     texto / no-texto con los primeros 512 bytes      (Iteración 2)
-internal/search/    partir el stream en líneas con tope y aplicar el matcher
-internal/output/    líneas completas a stdout; avisos y progreso a stderr
+internal/search/    delimitar líneas, buscarlas completas y retener el primer MiB
+                    de cada una para la salida
+internal/output/    registros completos a stdout; avisos y progreso a stderr
 internal/fakegcs/   servidor de prueba                                (Iteración 2)
 e2e/                un test por VC: TestVC01…TestVC50, invocan ./gcsgrep
 ```
@@ -122,8 +123,8 @@ nada, sin ampliar su acceso y sin poder escanear un bucket enorme por error.
 - Chequeo explícito de ADC antes de crear el cliente, aunque esté definido
   `STORAGE_EMULATOR_HOST`.
 - Listado paginado con tope: se corta al ver el objeto N+1 y aborta antes de leer.
-- Lectura por streaming, **secuencial** (un objeto por vez), con recorte de `\r` y
-  tope de 1 MB por línea.
+- Lectura por streaming, **secuencial** (un objeto por vez), con recorte de `\r`;
+  se busca en cada línea completa y se retiene solo su primer MiB para imprimir.
 - Acceso denegado (`403`) en listado o metadata → `gcsgrep: access denied: <ubicación>`.
 - Entorno: subir `data/acentos.log` a `$B`, crear `lectora` y `sin-acceso`, alerta de
   presupuesto.
@@ -150,7 +151,8 @@ progreso, flags combinados o repetidos.
 - [ ] VC-35 pasa — sin ADC → `2`, ninguna conexión al listener
 - [ ] VC-39 pasa — la suite de esta iteración corre con `lectora` y `$B` no cambia
 - [ ] VC-40 pasa — `access denied` con `sin-acceso`, match con `lectora`
-- [ ] VC-46 pasa — línea de más de 1 MB truncada con `...`
+- [ ] VC-46 pasa — un match literal tardío y una regex que atraviesa el primer
+  MiB se reportan con salida truncada en `...`
 
 **Implementado, pero el VC cierra en la Iteración 2.** Estos requisitos se construyen
 acá porque son parte del camino de punta a punta, pero una parte de su VC solo se
@@ -183,8 +185,9 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
   intermedia que lo permita.
 - **BR-2 entra acá** por la misma razón: es una restricción dura. La herramienta la
   cumple por construcción (solo usa ADC), y VC-40 fija el mensaje.
-- **BR-8 entra acá** porque el tope por línea es parte del lector de líneas, que se
-  escribe una sola vez. Sin él, `long_line_exceeds_1mb.log` rompe la evidencia de
+- **BR-8 entra acá** porque buscar la línea completa reteniendo solo su primer
+  MiB para la salida es parte del lector de líneas, que se escribe una sola vez.
+  Sin ese límite de salida, `long_line_exceeds_1mb.log` rompe la evidencia de
   VC-41 (`--max 6` lee ese objeto) y el streaming no tendría memoria acotada.
 - **VC-3 y la evidencia de VC-41 leen objetos no-texto** porque todavía no hay
   sniffing. Sus resultados no dependen de eso: `old_logs.log.gz` no contiene `(`, y
@@ -398,7 +401,7 @@ por una revisión de spec, no por el plan.
 | Color | Descartado: ensucia la salida para scripts (BR-9) |
 | `-r` | Descartado: la recursión ya la define la `/` final |
 | Pedir confirmación antes de una corrida cara | Descartado: rompe el uso desde scripts |
-| Encodings distintos de UTF-8 | Descartado en v1: se tratan como no-texto |
+| Convertir codificaciones distintas de UTF-8 | Fuera de v1; BR-6 clasifica por la muestra inicial de hasta 512 bytes |
 | S3, Azure, interfaz web, API o librería | Descartado en v1 |
 | Consistencia ante objetos que cambian durante la lectura | Riesgo conocido, aceptado |
 
