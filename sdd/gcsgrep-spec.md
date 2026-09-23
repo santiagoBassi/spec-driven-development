@@ -85,7 +85,7 @@ spec.
     `$B` no es público (tiene *public access prevention* activado), así que GCS le
     niega a esta identidad el listado y la lectura.
 - **Bucket de fixtures `$B`.** Bucket regional Standard en `us-east1`. Contiene exactamente las carpetas `logs/`, `data/`,
-  `edge-cases/` y `sniffing/` de [`test-fixtures/`](./test-fixtures/README.md), sin
+  `edge-cases/` y `sniffing/` de [`test-fixtures/`](../test-fixtures/README.md), sin
   el `README.md` (que contiene `timeout` y alteraría los resultados). Se suben como
   indica ese README; los objetos de `sniffing/` necesitan metadata especial:
 

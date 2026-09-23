@@ -1,0 +1,114 @@
+# gcsgrep — contexto
+
+> Estado actual, mapa de archivos y comandos. Se actualiza al cerrar cada iteración.
+> Las decisiones no obvias viven en [`DECISIONS.md`](./DECISIONS.md); el contrato, en
+> [`gcsgrep-spec.md`](./gcsgrep-spec.md); el orden de construcción, en
+> [`gcsgrep-plan.md`](./gcsgrep-plan.md).
+
+## Estado
+
+**Iteración 1 cerrada.** Sus 16 VCs pasan contra GCS real (2026-09-23). El registro, con
+comandos, resultados, desvíos y handoff, está en
+[`iterations/01-busqueda-punta-a-punta.md`](./iterations/01-busqueda-punta-a-punta.md). La
+tabla por VC está en [`gcsgrep-cobertura-vc.md`](./gcsgrep-cobertura-vc.md).
+
+| Iteración | Estado |
+|---|---|
+| 1 · Búsqueda de punta a punta | **Cerrada.** 16 de 16 VCs pasan |
+| 2 · Servidor de prueba, sniffing, `-c`/`-l` | Siguiente. No empezada |
+| 3 a 5 | No empezadas |
+
+Un punto del entorno de la Iteración 1 **no se pudo verificar**: la alerta de presupuesto de
+USD 1 (facturación del proyecto). Lo confirma quien administra el proyecto.
+
+## Qué hace hoy
+
+```
+gcsgrep [-E] [-i] [-n] [--max <N>|unlimited] [--] <patrón> <ubicación>
+```
+
+- Ubicaciones `gs://bucket/`, `gs://bucket/prefijo/` y `gs://bucket/objeto`.
+- Patrón literal; con `-E`, RE2. `-i` con case folding de Unicode. Líneas `\r\n` recortadas.
+- Tope de 1000 objetos (`--max`), que aborta antes de leer nada. Solo ADC. Solo lectura.
+- Exit codes de `grep`: `0` match, `1` sin match, `2` error.
+
+**Todavía no** (planeado): `-c`, `-l`, sniffing de binarios (los no-texto se leen como
+bytes), marcadores de carpeta, mensajes específicos de objeto o bucket inexistente,
+timeouts, concurrencia, progreso, flags combinados o repetidos. Ver el plan.
+
+## Mapa de archivos
+
+```
+cmd/gcsgrep/main.go        main: os.Exit(run(...))
+cmd/gcsgrep/run.go         orquesta: parseo → ADC → resolver objetos → pool de lectura → exit code
+internal/cli/              Parse(argv) → Config | UsageError; valida sin tocar GCS
+internal/location/         gs://bucket/[ruta] → modo prefijo (incluye bucket) u objeto
+internal/gcs/              ADC, cliente sin reintentos, List con tope, Stat, Open
+internal/search/           Compile del patrón; Scanner: líneas, recorte de \r, BR-8
+internal/output/           Printer (un Write por registro, con mutex) y Errorf
+e2e/                       un test por VC contra ./gcsgrep (ver DECISIONS D-15)
+test-fixtures/             los fixtures que se suben a $B
+lectora.json, sin-acceso.json   claves de las identidades de prueba. IGNORADAS por git, nunca se versionan
+
+sdd/                       todos los artefactos del pipeline SDD de este proyecto (sin la teoría)
+  gcsgrep-base-context.md    base context: requerimientos refinados, diseño, arquitectura
+  gcsgrep-spec.md            la spec revisada: 50 requisitos, 50 VCs
+  gcsgrep-plan.md            el plan de iteraciones y el alcance diferido
+  gcsgrep-cobertura-vc.md    una fila por VC: con qué se ejercita y qué se observó
+  CONTEXT.md                 este archivo: estado vivo, se reescribe
+  DECISIONS.md               decisiones no obvias, solo se agrega
+  iterations/NN-*.md         un registro inmutable por iteración cerrada
+```
+
+Fuera de `sdd/` quedan el material que entrega la cátedra (`enunciado.md`,
+`gcsgrep-requirements.md`, `docs/`, `ejemplo1/`) y el código.
+
+Dependencias entre paquetes: `cli` usa `location` y `search`; `gcs` no conoce `search`;
+`search` no conoce GCS (recibe un `io.Reader`); `cmd/gcsgrep` une todo.
+
+## Comandos
+
+```bash
+# Unitarios y vet (sin red)
+GOTOOLCHAIN=local go vet ./... && go test ./internal/...
+
+# Compilar
+go build -o gcsgrep ./cmd/gcsgrep
+
+# Suite completa contra el bucket real (necesita las claves y `gcloud` en el PATH)
+export GCSGREP_E2E_BUCKET=sdd-fardenghi-itba
+export GCSGREP_E2E_LECTORA=$PWD/lectora.json
+export GCSGREP_E2E_SIN_ACCESO=$PWD/sin-acceso.json
+go test ./e2e -count=1 -v        # ~50 s
+
+# Solo lo que no toca GCS (sirve una ruta ficticia para las claves)
+GCSGREP_E2E_BUCKET=sdd-fardenghi-itba GCSGREP_E2E_LECTORA=/x GCSGREP_E2E_SIN_ACCESO=/x \
+  go test ./e2e -v -run 'TestVC(05|06|14|22|23|35|42Parcial)$'
+
+# Usar la herramienta a mano con una identidad de prueba
+GOOGLE_APPLICATION_CREDENTIALS=$PWD/lectora.json ./gcsgrep timeout gs://sdd-fardenghi-itba/logs/app/
+```
+
+`go test ./e2e` compila el binario solo. La suite completa corre unos 50 s contra GCS real y
+consume unas pocas operaciones de listado y lectura (cabe de sobra en el free tier).
+
+## Entorno
+
+- **Bucket `$B`:** `gs://sdd-fardenghi-itba` (`us-east1`, Standard), proyecto
+  `sat-spec-driven-development`. 23 objetos: los fixtures de `test-fixtures/` sin el `README.md`.
+- **`lectora`:** solo `storage.objects.get` y `storage.objects.list`. **`sin-acceso`:** nada.
+- La cuenta de `gcloud` activa en esta máquina tiene la sesión vencida; no hace falta para la suite
+  (los tokens salen de las claves).
+- `go.mod` está fijado a `go 1.22` a propósito (D-01).
+- El binario `./gcsgrep` está en `.gitignore`.
+
+## Lo que sigue (Iteración 2)
+
+Ver el handoff en el registro de la Iteración 1. En corto: servidor de prueba con `httptest`,
+sniffing (BR-6/BR-7), `-c` y `-l`, marcadores de carpeta, y cerrar VC-12, 15, 41 y 42.
+
+Dos riesgos abiertos ya identificados:
+- **Transcoding (VC-45):** confirmar contra `$B` qué `Accept-Encoding` manda el cliente con lecturas
+  JSON. Si no se puede lograr, cambia el *qué* y se vuelve a la spec.
+- **Objeto inexistente vs. bucket inexistente (Iteración 3):** el cliente de Go descarta el cuerpo
+  del `404` de `Attrs`, así que la distinción por cuerpo del plan no funciona con esa llamada.

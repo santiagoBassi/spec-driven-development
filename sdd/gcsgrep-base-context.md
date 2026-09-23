@@ -4,7 +4,7 @@
 > refinados, notas de diseño y esquema de arquitectura. **No es la spec.** Es la
 > materia prima que consume el paso Especificar.
 >
-> Parte del borrador [`gcsgrep-requirements.md`](./gcsgrep-requirements.md) y
+> Parte del borrador [`gcsgrep-requirements.md`](../gcsgrep-requirements.md) y
 > responde sus preguntas abiertas. Los mensajes exactos, los umbrales medibles y los
 > VCs viven en [`gcsgrep-spec.md`](./gcsgrep-spec.md), no acá.
 
