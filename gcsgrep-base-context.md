@@ -3,8 +3,7 @@
 > **Estado: base context refinado.** Este documento es la evolución de
 > [`gcsgrep-requirements.md`](./gcsgrep-requirements.md): mismas secciones, pero con
 > las 10 preguntas abiertas resueltas, las reglas de negocio candidatas decididas
-> (con fundamento) y los NFRs con umbrales concretos. También incorpora las
-> decisiones que resolvieron los 14 puntos de [`INCONSISTENCIAS.md`](./INCONSISTENCIAS.md).
+> (con fundamento) y los NFRs con umbrales concretos.
 >
 > Sigue **sin ser la spec formal**. El siguiente paso del pipeline es convertir esto
 > en FRs atómicos en formato Dado/Cuando/Entonces con un VC por cada FR y BR, según

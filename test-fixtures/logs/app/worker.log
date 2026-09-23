@@ -1,0 +1,6 @@
+job_id=101 queue=default status=SUCCESS duration=120ms
+job_id=102 queue=default status=ERROR reason=timeout_exceeded retries=3
+job_id=103 queue=priority status=SUCCESS duration=45ms
+job_id=104 queue=batch status=ERROR reason=connection_reset retries=1
+job_id=105 queue=default status=TIMEOUT retries=5 action=deadletter
+job_id=106 queue=default status=SUCCESS duration=95ms

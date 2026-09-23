@@ -1,0 +1,15 @@
+2026-09-22 10:00:01 INFO Server started on port 8080
+2026-09-22 10:01:15 INFO Route registered /api/v1/status
+2026-09-22 10:02:40 INFO Route registered /api/v1/checkout
+2026-09-22 10:05:22 ERROR Request timeout after 3000ms uri=/api/v1/checkout
+2026-09-22 10:06:01 INFO Retry policy applied for worker-1
+2026-09-22 10:10:00 INFO Health check status OK
+2026-09-22 10:14:03 WARN Connection TIMEOUT to redis cache replica-0
+2026-09-22 10:20:11 INFO Cache fallback to memory cache
+2026-09-22 10:25:00 INFO Processing batch payment id=8842
+2026-09-22 10:30:15 ERROR Database Timeout connecting to replica-db
+2026-09-22 10:35:44 INFO Request completed 200 OK duration=45ms
+2026-09-22 10:40:12 WARN Client closed connection prematurely
+2026-09-22 10:45:00 INFO Health check status OK
+2026-09-22 10:50:23 ERROR Gateway timeout=504 from upstream payment service
+2026-09-22 10:59:59 INFO Graceful shutdown scheduled

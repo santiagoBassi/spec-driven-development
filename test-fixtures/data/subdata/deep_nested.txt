@@ -1,0 +1,3 @@
+Archivo anidado profundamente en data/subdata/
+Contiene timeout para probar busquedas recursivas o sobre prefijos parciales
+Fin de archivo anidado

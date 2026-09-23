@@ -1,0 +1,2 @@
+Archivo pequeno de menos de 512 bytes.
+Prueba de timeout en archivo chico.

@@ -1,0 +1,6 @@
+id,name,email,role,status
+1,Filipo Ardenghi,filipo@example.com,admin,active
+2,Santiago Bassi,santiago@example.com,developer,active
+3,John Doe,john@example.com,user,timeout_suspended
+4,Ana Gomez,ana@example.com,manager,active
+5,Carlos Lopez,carlos@example.com,tester,pending

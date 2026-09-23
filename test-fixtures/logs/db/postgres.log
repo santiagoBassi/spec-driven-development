@@ -1,0 +1,5 @@
+2026-09-22 08:00:00 UTC [1201]: [1-1] user=app,db=production LOG: checkpoint starting: time
+2026-09-22 08:00:05 UTC [1201]: [2-1] user=app,db=production LOG: checkpoint complete
+2026-09-22 08:15:33 UTC [1450]: [1-1] user=analytics,db=warehouse ERROR: canceling statement due to statement timeout
+2026-09-22 08:30:12 UTC [1602]: [1-1] user=app,db=production ERROR: deadlock detected
+2026-09-22 08:45:00 UTC [1201]: [3-1] user=app,db=production LOG: automatic vacuum of table accounts

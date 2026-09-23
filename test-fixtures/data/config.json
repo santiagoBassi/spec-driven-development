@@ -1,0 +1,13 @@
+{
+  "service_name": "payment-gateway",
+  "environment": "production",
+  "http_client": {
+    "timeout_seconds": 30,
+    "connect_timeout_ms": 5000,
+    "max_retries": 3
+  },
+  "features": {
+    "circuit_breaker": true,
+    "rate_limiting": true
+  }
+}

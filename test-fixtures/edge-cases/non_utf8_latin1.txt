@@ -1,0 +1,2 @@
+Configuración de conexión de red y contraseña de usuario.
+El parámetro timeout está configurado en 30 segundos.

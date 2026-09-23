@@ -1,0 +1,3 @@
+Linea 1 con retorno CRLF
+Linea 2 con timeout y terminacion Windows
+Linea 3 con CRLF sin match

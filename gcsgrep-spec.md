@@ -1,11 +1,8 @@
 # gcsgrep — spec
 
-> **Estado: lista para el gate.** Revisión 1 (§15–§21) y Revisión 2 (§22–§31) de
-> [`INCONSISTENCIAS.md`](./INCONSISTENCIAS.md) aplicadas (2026-09-22). La Revisión 2
-> renumeró todos los FR y VC; la correspondencia con los IDs anteriores está en §31.
->
-> Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md), que
-> ya incorpora las decisiones de [`INCONSISTENCIAS.md`](./INCONSISTENCIAS.md).
+> **Estado: revisada.** Pasó el gate de revisión de
+> [`docs/guia-sdd.md`](./docs/guia-sdd.md) sin preguntas abiertas.
+> Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md).
 >
 > Regla estructural: **cada FR, cada BR y cada NFR tiene un VC, y cada VC corresponde
 > a un único requisito.** VC-n verifica el n-ésimo requisito de la tabla de
@@ -106,8 +103,9 @@ spec.
   JSON de GCS que usa la herramienta (listar, consultar metadata y leer contenido),
   al que se apunta con `STORAGE_EMULATOR_HOST`. Expone el bucket `fake`, con los
   objetos que indica cada VC, y el bucket `empty`, sin objetos. Registra cada request
-  recibido y permite inyectar fallas por request: responder `500`, aceptar la
-  conexión y no responder nunca, o enviar el cuerpo en tramos espaciados. Los VCs
+  recibido y el máximo de lecturas de contenido abiertas al mismo tiempo, y permite
+  inyectar fallas por request: responder `500`, aceptar la conexión
+  y no responder nunca, o enviar el cuerpo en tramos espaciados. Los VCs
   contra este servidor corren con ADC válidas (por ejemplo, `lectora`): la
   herramienta las exige siempre (FR-35), aunque el servidor no las valide.
 - **Entorno sin ADC.** `env -u GOOGLE_APPLICATION_CREDENTIALS HOME=$(mktemp -d)
@@ -149,10 +147,12 @@ forma `gs://<bucket>/<objeto>:<texto>`, y sale con código `0`.
 lo detecte sin parsear la salida. Con `-c` el exit también es `1`, pero stdout lista
 los conteos en `0` (FR-18).
 
-> **VC-2** — `./gcsgrep palabra_inexistente_xyz gs://$B/` sale con código `1` y
-> stdout tiene 0 bytes. En stderr solo aparecen avisos de objetos salteados (BR-5).
-> `./gcsgrep -l palabra_inexistente_xyz gs://$B/` también sale con código `1` y stdout
-> de 0 bytes.
+> **VC-2** — `./gcsgrep palabra_inexistente_xyz gs://$B/` sale con código `1`,
+> stdout tiene 0 bytes, y stderr es exactamente estas 6 líneas (en cualquier orden),
+> todas de la forma `gcsgrep: gs://$B/<objeto>: not a text file, skipped` (BR-5), para
+> `edge-cases/binary_nullbyte.bin`, `edge-cases/sample_image.png`,
+> `edge-cases/non_utf8_latin1.txt`, `logs/archive/old_logs.log.gz`,
+> `sniffing/truncated_utf8_under_512.txt` y `sniffing/gzip_no_extension`.
 
 #### FR-3 · Tratar el patrón como literal por defecto
 
@@ -382,13 +382,19 @@ al menos un match, y deja de leer cada objeto en cuanto encuentra su primer matc
 
 #### FR-20 · Rechazar combinaciones de flags sin sentido
 
-**Dado** que `-c` y `-l` son excluyentes, y que `-n` no aplica a ninguno de los dos,
+**Dado** una invocación que en todo lo demás es válida,
 **Cuando** la persona combina `-c` con `-l`, o `-n` con `-c` o con `-l`,
-**Entonces** el sistema sale con código `2` sin operar contra GCS.
+**Entonces** el sistema sale con código `2`, escribe
+`gcsgrep: flags <a> and <b> cannot be used together` por stderr, con los dos flags en
+el orden en que aparecen en la invocación, y no opera contra GCS. `-c` y `-l` son
+excluyentes, y `-n` no aplica a ninguno de los dos.
 
 > **VC-20** — Para cada una de `-c -l`, `-n -c` y `-n -l`, `./gcsgrep <flags> timeout gs://$B/logs/`
-> sale con código `2`, stdout vacío, y la primera línea de stderr empieza con
-> `gcsgrep: ` y nombra los dos flags en conflicto. Cada caso cumple el chequeo P.
+> sale con código `2`, stdout vacío, y stderr es exactamente
+> `gcsgrep: flags -c and -l cannot be used together`,
+> `gcsgrep: flags -n and -c cannot be used together` y
+> `gcsgrep: flags -n and -l cannot be used together`, respectivamente. Cada caso cumple
+> el chequeo P.
 
 ### Invocación y concurrencia
 
@@ -408,34 +414,38 @@ Sintaxis completa:
 
 **Dado** un argumento anterior a `--` que empieza con `-` y no es un flag reconocido,
 **Cuando** la persona ejecuta el comando,
-**Entonces** el sistema sale con código `2`, la primera línea de stderr empieza con
-`gcsgrep: ` y no opera contra GCS. FR-24 fija el mensaje para los flags combinados o
-con `=`.
+**Entonces** el sistema sale con código `2`, escribe
+`gcsgrep: unknown flag: "<argumento>"` por stderr y no opera contra GCS. FR-24 fija
+el mensaje para los flags combinados o con `=`.
 
 > **VC-22** — `./gcsgrep -1] gs://$B/logs/db/postgres.log` y
-> `./gcsgrep -v timeout gs://$B/logs/` salen con código `2`, stdout vacío, y la
-> primera línea de stderr empieza con `gcsgrep: `. Cada caso cumple el chequeo P.
+> `./gcsgrep -v timeout gs://$B/logs/` salen con código `2`, stdout vacío, y stderr es
+> exactamente `gcsgrep: unknown flag: "-1]"` y `gcsgrep: unknown flag: "-v"`,
+> respectivamente. Cada caso cumple el chequeo P.
 
 #### FR-23 · Exigir exactamente dos posicionales
 
-**Dado** que la invocación lleva un patrón y una ubicación,
-**Cuando** la persona pasa una cantidad de posicionales distinta de dos,
-**Entonces** el sistema sale con código `2`, la primera línea de stderr empieza con
-`gcsgrep: ` y no opera contra GCS.
+**Dado** una invocación sin errores en los flags,
+**Cuando** la persona pasa una cantidad de posicionales distinta de dos (patrón y
+ubicación),
+**Entonces** el sistema sale con código `2`, escribe
+`gcsgrep: expected 2 arguments (pattern and location), got <n>` por stderr, donde
+`<n>` es la cantidad recibida, y no opera contra GCS.
 
 > **VC-23** — `./gcsgrep`, `./gcsgrep timeout` y
-> `./gcsgrep timeout gs://$B/logs/ extra` salen con código `2`, stdout vacío, y la
-> primera línea de stderr empieza con `gcsgrep: `. Cada caso cumple el chequeo P.
+> `./gcsgrep timeout gs://$B/logs/ extra` salen con código `2`, stdout vacío, y stderr
+> es exactamente el mensaje de arriba con `<n>` igual a `0`, `1` y `3`,
+> respectivamente. Cada caso cumple el chequeo P.
 
 #### FR-24 · Aceptar cada flag solo en su forma separada
 
-**Dado** que cada flag se pasa como un argumento propio (`-i -n`, no `-in`) y que los
-flags con valor lo reciben en el argumento siguiente (`--max 5`, no `--max=5`),
+**Dado** una invocación que en todo lo demás es válida,
 **Cuando** la persona combina flags cortos en un solo argumento (`-in`, `-ic`, `-Ei`)
 o pega el valor con `=` (`--max=5`, `--concurrency=8`),
 **Entonces** el sistema sale con código `2` y escribe
 `gcsgrep: unknown flag: "<argumento>" (pass each flag separately, values after a space)`
-por stderr, sin operar contra GCS.
+por stderr, sin operar contra GCS. Cada flag va en su propio argumento (`-i -n`) y,
+si lleva valor, este va en el argumento siguiente (`--max 5`).
 
 > **VC-24** — Para cada uno de `-in`, `-ic`, `-Ei`, `--max=5` y `--concurrency=8`,
 > `./gcsgrep <argumento> timeout gs://$B/logs/` sale con código `2`, stdout vacío, y
@@ -456,18 +466,25 @@ aunque los valores coincidan.
 > flag repetido (`-i`, `--max`, `--max`, `--concurrency`). Cada caso cumple el
 > chequeo P.
 
-#### FR-26 · Validar `--concurrency`
+#### FR-26 · Limitar las lecturas simultáneas con `--concurrency`
 
-**Dado** que `--concurrency` acepta un entero entre 1 y 32 (default 4),
-**Cuando** la persona pasa un valor no entero, menor que 1 o mayor que 32,
-**Entonces** el sistema sale con código `2` y escribe
+**Dado** una ubicación con varios objetos de texto,
+**Cuando** la persona ejecuta la búsqueda con `--concurrency <N>`, o sin el flag,
+**Entonces** el sistema nunca tiene más de N lecturas de contenido abiertas al mismo
+tiempo, con N = 4 si no se pasa el flag. N debe ser un entero entre 1 y 32: cualquier
+otro valor sale con código `2` y el mensaje
 `gcsgrep: invalid value for --concurrency: "<valor>" (integer between 1 and 32)` por
 stderr, sin operar contra GCS.
 
 > **VC-26** — Para cada uno de `0`, `33`, `-1`, `abc` y `1.5`,
 > `./gcsgrep --concurrency <valor> timeout gs://$B/logs/` sale con código `2`, stdout
 > vacío, y stderr es exactamente el mensaje de arriba con ese valor. Cada caso cumple
-> el chequeo P. Con `1` y con `32`, el mismo comando sale con código `0`.
+> el chequeo P. Con `1` y con `32`, el mismo comando sale con código `0`. Contra el
+> servidor de prueba, con 10 objetos `fake/par/01.log` … `fake/par/10.log` (una línea
+> `timeout` cada uno), cuyo cuerpo se envía en dos tramos separados por 2 s,
+> `./gcsgrep timeout gs://fake/par/` sale con código `0` y el máximo de lecturas
+> simultáneas registrado es exactamente `4`. Con `--concurrency 1` es `1`, y con
+> `--concurrency 8` es `8`.
 
 #### FR-27 · Reportar un solo error de uso
 
@@ -513,15 +530,20 @@ sale con código `2` aunque haya habido matches.
 
 #### FR-30 · Abortar si falla el listado o la consulta del objeto puntual
 
-**Dado** que GCS falla al listar la ubicación, o al consultar el objeto puntual,
+**Dado** que GCS falla al listar la ubicación, o al consultar la metadata del objeto
+puntual, por un motivo distinto de los que cubren FR-13, FR-16 y BR-2,
 **Cuando** la herramienta intenta obtener los objetos a leer,
-**Entonces** aborta la corrida con código `2` sin leer ningún objeto.
+**Entonces** aborta la corrida con código `2` sin leer ningún objeto y escribe por
+stderr `gcsgrep: <ubicación>: list error: <detalle>` si falló el listado, o
+`gcsgrep: <ubicación>: metadata error: <detalle>` si falló la consulta.
 
 > **VC-30** — Con el servidor de prueba respondiendo `500` al listado,
-> `./gcsgrep timeout gs://fake/` sale con código `2`, stdout vacío, stderr empieza con
-> `gcsgrep: `, y el servidor no registra ninguna lectura de contenido. Con el
-> servidor respondiendo `500` a la consulta de metadata de `fake/a.log`,
-> `./gcsgrep timeout gs://fake/a.log` sale con código `2`.
+> `./gcsgrep timeout gs://fake/` sale con código `2`, stdout vacío, stderr es una
+> sola línea que empieza con `gcsgrep: gs://fake/: list error: `, y el servidor no
+> registra ninguna lectura de contenido. Con el servidor respondiendo `500` a la
+> consulta de metadata de `fake/a.log`, `./gcsgrep timeout gs://fake/a.log` sale con
+> código `2`, stdout vacío, y stderr es una sola línea que empieza con
+> `gcsgrep: gs://fake/a.log: metadata error: `.
 
 #### FR-31 · No reintentar
 
@@ -554,13 +576,15 @@ corrida sigue según FR-29.
 **Dado** una página del listado, o la consulta del objeto puntual, que pasa 30
 segundos sin recibir datos,
 **Cuando** se cumple ese plazo,
-**Entonces** el request se corta y la corrida aborta con código `2` sin leer ningún
-objeto.
+**Entonces** el request se corta y la corrida aborta según FR-30, con
+`timeout after 30s without data` como `<detalle>`.
 
 > **VC-33** — Con el listado colgado en el servidor de prueba,
-> `./gcsgrep timeout gs://fake/` sale con código `2`, stdout vacío y la primera línea
-> de stderr empieza con `gcsgrep: `. Con la consulta de metadata de `fake/a.log`
-> colgada, `./gcsgrep timeout gs://fake/a.log` cumple lo mismo.
+> `./gcsgrep timeout gs://fake/` sale con código `2`, stdout vacío y stderr es
+> exactamente `gcsgrep: gs://fake/: list error: timeout after 30s without data`. Con
+> la consulta de metadata de `fake/a.log` colgada, `./gcsgrep timeout gs://fake/a.log`
+> sale con código `2`, stdout vacío y stderr es exactamente
+> `gcsgrep: gs://fake/a.log: metadata error: timeout after 30s without data`.
 
 #### FR-34 · No cortar una lectura lenta pero continua
 
@@ -576,14 +600,15 @@ objeto.
 
 **Dado** que no hay Application Default Credentials disponibles,
 **Cuando** la persona ejecuta una búsqueda con argumentos válidos,
-**Entonces** el sistema sale con código `2` con un mensaje por stderr, antes de
-cualquier operación contra GCS. La verificación se hace siempre, aunque esté definido
-`STORAGE_EMULATOR_HOST`.
+**Entonces** el sistema sale con código `2` y escribe
+`gcsgrep: no Application Default Credentials found (run: gcloud auth application-default login)`
+por stderr, antes de cualquier operación contra GCS. La verificación se hace siempre,
+aunque esté definido `STORAGE_EMULATOR_HOST`.
 
 > **VC-35** — En el entorno sin ADC, con `STORAGE_EMULATOR_HOST` apuntando al
 > servidor de prueba, `./gcsgrep timeout gs://fake/` sale con código `2`, stdout
-> vacío, la primera línea de stderr empieza con `gcsgrep: ` y contiene
-> `credentials`, y el servidor registra cero requests.
+> vacío, stderr es exactamente el mensaje de arriba, y el servidor registra cero
+> requests.
 
 #### FR-36 · Terminar en silencio si se cierra stdout
 
@@ -647,14 +672,20 @@ permisos.
 ### BR-2 · No ampliar el acceso de quien invoca
 
 La herramienta usa solo las credenciales ADC de quien la invoca. Si esa identidad no
-puede leer un bucket o un objeto, gcsgrep tampoco.
+puede leer un bucket o un objeto, gcsgrep tampoco. Si GCS niega el listado de la
+ubicación o la consulta del objeto puntual, la corrida aborta con código `2` y el
+mensaje `gcsgrep: access denied: <ubicación>`, sin leer ningún objeto. Si lo que se
+niega es la lectura de un objeto listado, ese objeto falla según FR-29.
 
 *Fundamento:* restricción dura del enunciado. Evita que la herramienta sea un vector
 de escalamiento de privilegios.
 *Excepciones:* ninguna.
 
-> **VC-40** — Con ADC = `lectora`, `./gcsgrep timeout gs://$B2/` sale con código `2`
-> y stdout vacío. Con ADC = `admin-b2`, el mismo comando sale con código `0` y su
+> **VC-40** — Con ADC = `lectora`, `./gcsgrep timeout gs://$B2/` sale con código `2`,
+> stdout vacío, y stderr es exactamente `gcsgrep: access denied: gs://$B2/`. Con
+> ADC = `lectora`, `./gcsgrep timeout gs://$B2/nota.txt` sale con código `2` y stderr
+> es exactamente `gcsgrep: access denied: gs://$B2/nota.txt`. Con ADC = `admin-b2`,
+> `./gcsgrep timeout gs://$B2/` sale con código `0` y su
 > stdout es exactamente `gs://$B2/nota.txt:timeout b2`.
 
 ### BR-3 · Tope de objetos listados
@@ -861,7 +892,7 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | FR-3 | FR-a | VC-3 | borde |
 | FR-4 | FR-a | VC-4 | feliz |
 | FR-5 | FR-a | VC-5 | falla |
-| FR-6 | FR-i (revisión 1) | VC-6 | falla |
+| FR-6 | Gate de revisión | VC-6 | falla |
 | FR-7 | FR-d | VC-7 | feliz |
 | FR-8 | FR-c | VC-8 | feliz |
 | FR-9 | FR-a | VC-9 | borde (`\r\n`) |
@@ -872,17 +903,17 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | FR-14 | FR-b | VC-14 | falla |
 | FR-15 | Pregunta 8 | VC-15 | borde (vacío) |
 | FR-16 | Pregunta 8 | VC-16 | falla |
-| FR-17 | FR-b (revisión 1) | VC-17 | borde (marcador de carpeta) |
+| FR-17 | FR-b + gate de revisión | VC-17 | borde (marcador de carpeta) |
 | FR-18 | FR-h | VC-18 | feliz + borde (todo 0) |
 | FR-19 | FR-h | VC-19 | feliz |
 | FR-20 | FR-h | VC-20 | falla |
 | FR-21 | FR-i | VC-21 | borde |
 | FR-22 | FR-i | VC-22 | falla |
 | FR-23 | FR-i | VC-23 | falla |
-| FR-24 | FR-i (revisión 1) | VC-24 | falla |
-| FR-25 | FR-i (revisión 1) | VC-25 | falla |
-| FR-26 | FR-j | VC-26 | borde (límites) |
-| FR-27 | FR-i (revisión 2) | VC-27 | falla |
+| FR-24 | Gate de revisión | VC-24 | falla |
+| FR-25 | Gate de revisión | VC-25 | falla |
+| FR-26 | Pregunta 9 | VC-26 | feliz + borde (límites) |
+| FR-27 | Gate de revisión | VC-27 | falla |
 | FR-28 | FR-j | VC-28 | invariante |
 | FR-29 | FR-f | VC-29 | falla parcial |
 | FR-30 | NFR-c | VC-30 | falla |
@@ -891,7 +922,7 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | FR-33 | NFR-c | VC-33 | falla |
 | FR-34 | NFR-c | VC-34 | borde (lento) |
 | FR-35 | Pregunta 2 | VC-35 | falla |
-| FR-36 | BR-9 (revisión 1) | VC-36 | borde (pipe cerrado) |
+| FR-36 | Gate de revisión | VC-36 | borde (pipe cerrado) |
 | FR-37 | FR-g | VC-37 | feliz |
 | FR-38 | FR-g | VC-38 | borde (sin TTY) |
 | BR-1 | BR-a | VC-39 | invariante |
@@ -902,7 +933,7 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | BR-6 | BR-d | VC-44 | borde (muestra) |
 | BR-7 | BR-d | VC-45 | borde (gzip) |
 | BR-8 | BR-e | VC-46 | borde (límite) |
-| BR-9 | Revisión 1 (ex NFR-4 de la spec) | VC-47 | invariante |
+| BR-9 | Pregunta 8 + gate de revisión | VC-47 | invariante |
 | NFR-1 | NFR-a | VC-48 | medición |
 | NFR-2 | NFR-b | VC-49 | medición |
 | NFR-3 | NFR-c | VC-50 | medición |
