@@ -21,6 +21,15 @@ tabla por VC está en [`gcsgrep-cobertura-vc.md`](./gcsgrep-cobertura-vc.md).
 Un punto del entorno de la Iteración 1 **no se pudo verificar**: la alerta de presupuesto de
 USD 1 (facturación del proyecto). Lo confirma quien administra el proyecto.
 
+**Spec revisada de nuevo tras cerrar la Iteración 1** (sigue en 50 requisitos y 50 VCs):
+- FR-13 y FR-16 informan un recurso inexistente con un solo mensaje,
+  `gcsgrep: not found: <ubicación>` (D-17).
+- BR-4 y FR-26 fijan qué pasa con `--max` o `--concurrency` sin valor (D-18).
+
+El **código no cambió**: sigue con los mensajes provisionales de D-13, que la Iteración 3
+reemplaza. El registro `iterations/01` no se toca (es inmutable): lo aprendido vive acá, en
+`DECISIONS.md` y en el plan.
+
 ## Qué hace hoy
 
 ```
@@ -33,8 +42,9 @@ gcsgrep [-E] [-i] [-n] [--max <N>|unlimited] [--] <patrón> <ubicación>
 - Exit codes de `grep`: `0` match, `1` sin match, `2` error.
 
 **Todavía no** (planeado): `-c`, `-l`, sniffing de binarios (los no-texto se leen como
-bytes), marcadores de carpeta, mensajes específicos de objeto o bucket inexistente,
-timeouts, concurrencia, progreso, flags combinados o repetidos. Ver el plan.
+bytes), marcadores de carpeta, el mensaje `not found` para un recurso inexistente (hoy sale
+como `list error` o `metadata error`, D-13), timeouts, concurrencia, progreso, flags
+combinados o repetidos y `--concurrency`. Ver el plan.
 
 ## Mapa de archivos
 
@@ -107,8 +117,13 @@ consume unas pocas operaciones de listado y lectura (cabe de sobra en el free ti
 Ver el handoff en el registro de la Iteración 1. En corto: servidor de prueba con `httptest`,
 sniffing (BR-6/BR-7), `-c` y `-l`, marcadores de carpeta, y cerrar VC-12, 15, 41 y 42.
 
-Dos riesgos abiertos ya identificados:
-- **Transcoding (VC-45):** confirmar contra `$B` qué `Accept-Encoding` manda el cliente con lecturas
-  JSON. Si no se puede lograr, cambia el *qué* y se vuelve a la spec.
-- **Objeto inexistente vs. bucket inexistente (Iteración 3):** el cliente de Go descarta el cuerpo
-  del `404` de `Attrs`, así que la distinción por cuerpo del plan no funciona con esa llamada.
+**A resolver primero: transcoding (VC-45).** Ya está medido (D-19): `transcoded.log` llega como
+texto, pero el request envía `Accept-Encoding: gzip`, que agrega el transporte HTTP de Go y BR-7 no
+admite. Hay que ajustar el cliente para que no lo pida y verificarlo con el servidor de prueba
+(que registra headers) y con VC-45 contra `$B`.
+
+**Para no perder de vista:**
+- El caso de `--max` sin valor se agrega a `TestVC42Parcial` cuando VC-42 cierre en esta iteración
+  (D-18); el código ya lo cumple.
+- VC-13 y VC-16 de la Iteración 3 cambiaron con la spec (un solo mensaje `not found`, D-17). No hay
+  nada que hacer antes de esa iteración.

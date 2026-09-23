@@ -136,8 +136,8 @@ nada, sin ampliar su acceso y sin poder escanear un bucket enorme por error.
   presupuesto.
 
 **Fuera de alcance de esta iteración:** servidor de prueba, sniffing de binarios (los
-objetos no-texto se leen como bytes), `-c`, `-l`, marcadores de carpeta, mensajes
-específicos de objeto o bucket inexistente, fallos de red y timeouts, concurrencia,
+objetos no-texto se leen como bytes), `-c`, `-l`, marcadores de carpeta, el mensaje
+de recurso inexistente (`not found`), fallos de red y timeouts, concurrencia,
 progreso, flags combinados o repetidos.
 
 **Criterios de éxito**
@@ -170,7 +170,7 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
 | VC-12 (FR-12) | `./gcsgrep timeout gs://$B/logs/app/api.log` → `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` |
 | VC-15 (FR-15) | `gs://$B/no-existe/` → `1`, stdout y stderr vacíos | Bucket existente sin objetos (`fake/empty`) |
 | VC-41 (BR-3) | `--max 5` sobre `edge-cases/` aborta con el mensaje exacto; `--max 6` → `0` | Tope por defecto de 1000 y que no se pida la página siguiente |
-| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, cumplen el chequeo P | `--max unlimited` leyendo 2500 objetos |
+| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, cumplen el chequeo P | `--max unlimited` leyendo 2500 objetos, y `--max` sin valor (agregado a la spec al cerrar esta iteración; el código ya lo implementa) |
 
 **Demostrable así:**
 
@@ -259,14 +259,28 @@ que la Iteración 1 dejó con evidencia parcial.
 - [ ] VC-12 pasa — objeto puntual sin request de listado *(implementado en la 1)*
 - [ ] VC-15 pasa — también con el bucket `empty` *(implementado en la 1)*
 - [ ] VC-41 pasa — tope de 1000 sin paginar de más *(implementado en la 1)*
-- [ ] VC-42 pasa — `--max unlimited` sobre 2500 objetos *(implementado en la 1)*
+- [ ] VC-42 pasa — `--max unlimited` sobre 2500 objetos, y `--max` sin valor → `2`,
+  cumple el chequeo P *(implementado en la 1)*
 - [ ] **VC-3 sigue pasando**, ahora con los no-texto salteados
 
-**Riesgo a resolver primero: transcoding (VC-45).** BR-7 exige que la lectura no
-pida `Accept-Encoding: gzip`. Hay que confirmar contra `$B` qué headers manda el
-cliente de Go con lecturas JSON y si el transporte HTTP descomprime por su cuenta.
-Si `transcoded.log` llega comprimido, la corrección es de configuración del cliente.
-Si no se puede lograr, cambia el *qué*: se vuelve a la spec, no se ajusta el VC.
+**A resolver primero: transcoding (VC-45).** Se midió al cerrar la Iteración 1:
+
+- `sniffing/transcoded.log` (con `Content-Encoding: gzip` y `Cache-Control: no-cache`)
+  **ya llega como texto** con el cliente actual, así que el riesgo original ("llega
+  comprimido") no se da.
+- Pero el request **sí envía** `Accept-Encoding: gzip`, en metadata y en lectura. La
+  librería no lo pide (solo lo pone con `ReadCompressed`): lo agrega el transporte HTTP
+  de Go, que además descomprime por su cuenta. BR-7 exige que la lectura no lo pida.
+- VC-45 pasaría igual, porque no observa el header, pero no se cumpliría la letra de
+  BR-7. Por cómo funciona el transporte, un objeto con `Content-Encoding: gzip` y
+  `Cache-Control: no-transform` también se buscaría como texto, y BR-7 dice que no
+  (ningún fixture lo cubre).
+
+La corrección es de configuración del cliente: que no pida gzip, para que sea GCS
+quien decida si descomprime. Se verifica con el servidor de prueba, que registra los
+headers de cada request, y con VC-45 contra `$B`, que tiene que seguir pasando. Si no
+se puede lograr, cambia el *qué*: se vuelve a la spec, no se ajusta el VC. Decisión
+registrada en `DECISIONS.md` (D-19).
 
 ---
 
@@ -277,7 +291,9 @@ resultado completo.
 
 **Alcance**
 
-- Distinción entre objeto inexistente (FR-13) y bucket inexistente (FR-16).
+- Recurso inexistente, con un solo mensaje, `gcsgrep: not found: <ubicación>`: FR-13
+  para objeto puntual (falte el objeto o el bucket) y FR-16 para bucket o prefijo.
+  No se distingue cuál falta.
 - Error de lectura de un objeto: aviso, se sigue con el resto, exit `2`.
 - Error de listado o de metadata: aborta sin leer.
 - Timeout por inactividad de 30 s en listado, metadata y lectura, contado desde el
@@ -287,8 +303,10 @@ resultado completo.
 
 **Criterios de éxito**
 
-- [ ] VC-13 pasa — objeto inexistente con la pista de la `/` final
-- [ ] VC-16 pasa — `bucket not found` para ubicación de bucket y de objeto
+- [ ] VC-13 pasa — `not found` para un objeto puntual inexistente y para uno en un
+  bucket inexistente
+- [ ] VC-16 pasa — `not found` para un bucket inexistente, con ubicación de bucket y
+  de prefijo
 - [ ] VC-29 pasa — un objeto que falla no frena al resto, exit `2`
 - [ ] VC-30 pasa — `list error` y `metadata error` abortan sin leer
 - [ ] VC-31 pasa — exactamente un request al recurso que falla
@@ -303,13 +321,17 @@ resultado completo.
   `ResponseHeaderTimeout` de 30 s y un wrapper del cuerpo que reinicia un timer con
   cada lectura. Así cubre listado, metadata y contenido de la misma forma, y un
   deadline total no cortaría una lectura lenta pero continua (FR-34).
-- **Bucket vs. objeto inexistente sin `storage.buckets.get`.** `lectora` solo tiene
-  `objectViewer`, así que no puede consultar el bucket. El `404` de metadata se
-  distingue por el cuerpo del error de GCS (`No such object` vs. bucket
-  inexistente). Se valida contra GCS real al empezar la iteración, y el servidor de
-  prueba replica ese cuerpo. Si GCS no los distingue, la alternativa es un listado
-  con `maxResults=1` solo en el camino de error. La spec no lo prohíbe, porque FR-12
-  habla del caso exitoso. Se registra en `DECISIONS.md`.
+- **Un solo mensaje para un recurso inexistente.** No hace falta distinguir objeto de
+  bucket: no hay que consultar el bucket (`lectora` no tiene `storage.buckets.get`) ni
+  leer el cuerpo del `404`, que el cliente de Go descarta. Alcanza con mapear los
+  errores que ya distingue: `ErrObjectNotExist` en la consulta del objeto puntual y
+  `ErrBucketNotExist` en el listado, ambos a `not found: <ubicación>`. Medido contra
+  GCS real al cerrar la Iteración 1: bucket inexistente en el listado → `bucket doesn't
+  exist`; objeto inexistente, o bucket inexistente con ubicación de objeto → `object
+  doesn't exist`. No se hace ningún request extra, así que FR-12 no se toca.
+  Un prefijo sin objetos en un bucket que existe sigue siendo `1` (FR-15). Un `404` en la
+  lectura de un objeto ya listado (borrado entre el listado y la lectura) es un fallo de
+  lectura, FR-29, y no `not found`. Registrado en `DECISIONS.md` (D-17).
 - **VC-32, VC-33 y VC-34 tardan entre 30 y 60 s cada uno.** Corren en paralelo con
   `t.Parallel()` para que el gate no pase de unos pocos minutos.
 
@@ -335,7 +357,8 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 
 - [ ] VC-24 pasa — `-in`, `--max=5`, etc. → `2`, cumple el chequeo P
 - [ ] VC-25 pasa — flag repetido → `2`, cumple el chequeo P
-- [ ] VC-26 pasa — máximo de lecturas simultáneas exactamente `4`, `1` y `8`
+- [ ] VC-26 pasa — máximo de lecturas simultáneas exactamente `4`, `1` y `8`, y
+  `--concurrency` sin valor → `2`, cumple el chequeo P
 - [ ] VC-27 pasa — varios errores de uso → una sola línea
 - [ ] VC-28 pasa — 10 corridas con `--concurrency 32` idénticas a la secuencial
 - [ ] VC-36 pasa — `| head -1` → `141`, stderr vacío, menos de 100 lecturas
@@ -415,13 +438,19 @@ por una revisión de spec, no por el plan.
 
 - **Se actualiza el plan** si cambia el *cómo* o el orden: una pieza compartida que
   conviene adelantar, un VC que resulta depender de algo de otra iteración.
-- **Se vuelve a la spec** si cambia el *qué*. Los dos candidatos identificados son el
-  transcoding de GCS (Iteración 2) y la distinción bucket/objeto inexistente
-  (Iteración 3).
+- **Se vuelve a la spec** si cambia el *qué*. Los dos candidatos que se identificaron al
+  planificar se resolvieron al cerrar la Iteración 1:
+  - La distinción bucket/objeto inexistente **sí cambió el qué**: FR-13 y FR-16 informan
+    un mismo mensaje, `not found`.
+  - El transcoding **no cambió el qué**: era de configuración del cliente (Iteración 2).
+
+  Además, implementar la Iteración 1 llevó a la spec un hueco que no estaba previsto: qué
+  pasa con un flag que exige valor y llega sin él (BR-4 y FR-26).
 - **No se reescribe** el registro de una iteración terminada. Lo aprendido va a
   `CONTEXT.md`, `DECISIONS.md` y a las iteraciones futuras de este plan.
 
 ## Qué sigue
 
-Implementar **solo la Iteración 1** y registrar su evidencia en
-`gcsgrep-cobertura-vc.md`.
+La Iteración 1 está hecha y commiteada (`f1ab462`); su registro está en
+`iterations/01-busqueda-punta-a-punta.md`. Sigue **solo la Iteración 2**, empezando por el
+transcoding, y su evidencia va a `gcsgrep-cobertura-vc.md`.

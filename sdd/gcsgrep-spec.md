@@ -4,6 +4,16 @@
 > tras ajustar el entorno de verificación a un único bucket de fixtures, un bucket de
 > performance y ningún bucket sin acceso, y el umbral de NFR-1 a la región del bucket.
 > Ningún FR ni BR cambió.
+>
+> **Revisada otra vez tras cerrar la Iteración 1**, con dos cambios que salen de
+> implementarla, ninguno de los cuales altera la cuenta (siguen siendo 50 requisitos y
+> 50 VCs):
+> - FR-13 y FR-16 informan un recurso inexistente con un mismo mensaje,
+>   `gcsgrep: not found: <ubicación>`, y ya no distinguen si falta el objeto o el bucket.
+>   Se reparten por tipo de ubicación: FR-13 para objeto puntual, FR-16 para bucket o
+>   prefijo. Se quita la pista de la `/` final.
+> - BR-4 y FR-26 fijan qué pasa cuando `--max` o `--concurrency` llegan sin valor.
+>
 > Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md).
 >
 > Regla estructural: **cada FR, cada BR y cada NFR tiene un VC, y cada VC corresponde
@@ -290,16 +300,20 @@ profundidad.
 
 #### FR-13 · Rechazar un objeto puntual inexistente
 
-**Dado** un bucket existente en el que no hay un objeto con el nombre exacto indicado,
-**Cuando** la persona usa una ubicación sin `/` final,
-**Entonces** el sistema sale con código `2` y escribe por stderr
-`gcsgrep: object not found: gs://<bucket>/<ruta> (to search under a prefix, end the location with /)`.
-No busca en otros objetos que empiecen igual. Si el que no existe es el bucket, se
-aplica FR-16.
+**Dado** una ubicación de objeto puntual (sin `/` final) que no existe: no hay un objeto
+con ese nombre exacto, o el bucket no existe,
+**Cuando** la persona busca en ella,
+**Entonces** el sistema sale con código `2` y escribe
+`gcsgrep: not found: <ubicación>` por stderr, con la ubicación tal como se recibió. No
+busca en otros objetos que empiecen igual. No distingue cuál de los dos falta, el
+objeto o el bucket: el recurso no existe.
 
 > **VC-13** — `./gcsgrep timeout gs://$B/logs/app` (existe `logs/app/` como prefijo,
 > no como objeto) sale con código `2`, stdout vacío, y stderr es exactamente
-> `gcsgrep: object not found: gs://$B/logs/app (to search under a prefix, end the location with /)`.
+> `gcsgrep: not found: gs://$B/logs/app`.
+> `./gcsgrep timeout gs://gcsgrep-bucket-que-no-existe-7f3a/a.log` sale con código `2`,
+> stdout vacío, y stderr es exactamente
+> `gcsgrep: not found: gs://gcsgrep-bucket-que-no-existe-7f3a/a.log`.
 
 #### FR-14 · Rechazar una ubicación con formato inválido
 
@@ -327,17 +341,18 @@ sigue al bucket,
 
 #### FR-16 · Rechazar un bucket inexistente
 
-**Dado** un bucket que no existe,
-**Cuando** la persona busca en él, con una ubicación de bucket, de prefijo o de objeto
-puntual,
+**Dado** una ubicación de bucket o de prefijo cuyo bucket no existe,
+**Cuando** la persona busca en ella,
 **Entonces** el sistema sale con código `2` y escribe
-`gcsgrep: bucket not found: <bucket>` por stderr. Es distinto de un bucket vacío
-(FR-15) y de un objeto inexistente (FR-13).
+`gcsgrep: not found: <ubicación>` por stderr, con la ubicación tal como se recibió: el
+mismo mensaje que FR-13. Es distinto de un bucket que existe pero no tiene objetos, o
+de un prefijo sin objetos (FR-15), que sale con código `1`. Con una ubicación de objeto
+puntual, el bucket inexistente se informa según FR-13.
 
 > **VC-16** — `./gcsgrep timeout gs://gcsgrep-bucket-que-no-existe-7f3a/` y
-> `./gcsgrep timeout gs://gcsgrep-bucket-que-no-existe-7f3a/a.log` salen con código
-> `2`, stdout vacío, y stderr es exactamente
-> `gcsgrep: bucket not found: gcsgrep-bucket-que-no-existe-7f3a`.
+> `./gcsgrep timeout gs://gcsgrep-bucket-que-no-existe-7f3a/logs/` salen con código
+> `2`, stdout vacío, y stderr es exactamente `gcsgrep: not found: <ubicación>`, con
+> `<ubicación>` reemplazada por el argumento recibido.
 
 #### FR-17 · Ignorar los marcadores de carpeta
 
@@ -486,12 +501,17 @@ aunque los valores coincidan.
 tiempo, con N = 4 si no se pasa el flag. N debe ser un entero entre 1 y 32: cualquier
 otro valor sale con código `2` y el mensaje
 `gcsgrep: invalid value for --concurrency: "<valor>" (integer between 1 and 32)` por
-stderr, sin operar contra GCS.
+stderr, sin operar contra GCS. El valor es siempre el argumento que sigue a
+`--concurrency`, sea cual sea. Si `--concurrency` es el último argumento y no hay
+valor, sale con código `2` y el mensaje `gcsgrep: flag --concurrency requires a value`
+por stderr, sin operar contra GCS.
 
 > **VC-26** — Para cada uno de `0`, `33`, `-1`, `abc` y `1.5`,
 > `./gcsgrep --concurrency <valor> timeout gs://$B/logs/` sale con código `2`, stdout
 > vacío, y stderr es exactamente el mensaje de arriba con ese valor. Cada caso cumple
-> el chequeo P. Con `1` y con `32`, el mismo comando sale con código `0`. Contra el
+> el chequeo P. `./gcsgrep timeout gs://$B/logs/ --concurrency` sale con código `2`,
+> stdout vacío, y stderr es exactamente `gcsgrep: flag --concurrency requires a value`;
+> también cumple el chequeo P. Con `1` y con `32`, el mismo comando sale con código `0`. Contra el
 > servidor de prueba, con 10 objetos `fake/par/01.log` … `fake/par/10.log` (una línea
 > `timeout` cada uno), cuyo cuerpo se envía en dos tramos separados por 2 s,
 > `./gcsgrep timeout gs://fake/par/` sale con código `0` y el máximo de lecturas
@@ -732,7 +752,10 @@ mucha lectura.
 `--max <N>` con N entero ≥ 1 fija el tope en N, y `--max unlimited` lo desactiva.
 Cualquier otro valor es un error de uso: código `2` y el mensaje
 `gcsgrep: invalid value for --max: "<valor>" (integer >= 1 or unlimited)`, sin operar
-contra GCS.
+contra GCS. El valor es siempre el argumento que sigue a `--max`, sea cual sea
+(`--max -3` informa el valor `-3`). Si `--max` es el último argumento y no hay valor,
+es un error de uso: código `2` y el mensaje `gcsgrep: flag --max requires a value`, sin
+operar contra GCS.
 
 *Fundamento:* el tope protege del error, no del uso deliberado. Subirlo tiene que
 ser una decisión explícita en la línea de comandos.
@@ -741,6 +764,8 @@ ser una decisión explícita en la línea de comandos.
 > **VC-42** — Para cada uno de `0`, `-3`, `abc` y `1.5`,
 > `./gcsgrep --max <valor> timeout gs://$B/logs/` sale con código `2`, stdout vacío, y
 > stderr es exactamente el mensaje de arriba con ese valor; cada caso cumple el
+> chequeo P. `./gcsgrep timeout gs://$B/logs/ --max` sale con código `2`, stdout vacío,
+> y stderr es exactamente `gcsgrep: flag --max requires a value`; también cumple el
 > chequeo P. Contra el servidor de prueba con 2500 objetos,
 > `./gcsgrep --max unlimited timeout gs://fake/many/` no sale con código `2` y el
 > servidor registra la lectura de los 2500 objetos.
@@ -926,10 +951,10 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | FR-10 | FR-b | VC-10 | feliz |
 | FR-11 | FR-b | VC-11 | feliz |
 | FR-12 | FR-b | VC-12 | feliz |
-| FR-13 | FR-b | VC-13 | falla |
+| FR-13 | FR-b + hallazgo de la Iteración 1 | VC-13 | falla |
 | FR-14 | FR-b | VC-14 | falla |
 | FR-15 | Pregunta 8 | VC-15 | borde (vacío) |
-| FR-16 | Pregunta 8 | VC-16 | falla |
+| FR-16 | Pregunta 8 + hallazgo de la Iteración 1 | VC-16 | falla |
 | FR-17 | FR-b + gate de revisión | VC-17 | borde (marcador de carpeta) |
 | FR-18 | FR-h | VC-18 | feliz + borde (todo 0) |
 | FR-19 | FR-h | VC-19 | feliz |
@@ -939,7 +964,7 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | FR-23 | FR-i | VC-23 | falla |
 | FR-24 | Gate de revisión | VC-24 | falla |
 | FR-25 | Gate de revisión | VC-25 | falla |
-| FR-26 | Pregunta 9 | VC-26 | feliz + borde (límites) |
+| FR-26 | Pregunta 9 + hallazgo de la Iteración 1 | VC-26 | feliz + borde (límites, sin valor) |
 | FR-27 | Gate de revisión | VC-27 | falla |
 | FR-28 | FR-j | VC-28 | invariante |
 | FR-29 | FR-f | VC-29 | falla parcial |
@@ -955,7 +980,7 @@ mensaje que corresponden a la fase (FR-32 y FR-33).
 | BR-1 | BR-a | VC-39 | invariante |
 | BR-2 | BR-b | VC-40 | falla (acceso) |
 | BR-3 | BR-c | VC-41 | borde (límite) |
-| BR-4 | BR-c | VC-42 | borde + falla |
+| BR-4 | BR-c + hallazgo de la Iteración 1 | VC-42 | borde + falla |
 | BR-5 | BR-d | VC-43 | borde (mixto) |
 | BR-6 | BR-d | VC-44 | borde (muestra) |
 | BR-7 | BR-d | VC-45 | borde (gzip) |

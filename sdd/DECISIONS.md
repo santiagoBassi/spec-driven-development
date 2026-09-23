@@ -179,3 +179,78 @@ GCS real y se eliminó en vez de dejar código sin verificar.
   permisos de escritura (abajo).
 - Los permisos efectivos se comprobaron con `testIamPermissions` (que no escribe): `lectora` tiene
   solo `storage.objects.get` y `storage.objects.list`; `sin-acceso`, ninguno.
+
+## Entre la Iteración 1 y la 2 (clasificación de lo aprendido)
+
+Se clasificó lo aprendido al cerrar la Iteración 1: lo que cambia el *cómo* va al plan, lo que
+cambia el *qué* vuelve a la spec, que se revisó de nuevo (sigue en 50 requisitos y 50 VCs).
+
+### D-17 · Un recurso inexistente se informa con un solo mensaje: `not found`
+
+**Decisión (cambia la spec, FR-13 y FR-16):** `gcsgrep: not found: <ubicación>`, con la
+ubicación tal como se recibió, igual que `access denied: <ubicación>`. Ya no se distingue si
+falta el objeto o el bucket. Los dos requisitos se reparten por **tipo de ubicación**, no por qué
+recurso falta: FR-13 para objeto puntual (falte el objeto o su bucket), FR-16 para bucket o
+prefijo. Así se conservan los números y la regla de un VC por requisito.
+
+**Por qué:** medido contra GCS real, el cliente de Go convierte todo `404` de la consulta de
+metadata en `object doesn't exist` y descarta el cuerpo del error, así que un objeto
+inexistente y un bucket inexistente con ubicación de objeto son indistinguibles.
+`lectora` tampoco puede consultar el bucket (no tiene `storage.buckets.get`).
+
+**Alternativas descartadas:**
+- Un listado de 1 resultado solo en el camino de error: distingue, pero roza la letra de FR-12
+  ("sin listar el bucket") y suma un request.
+- Un transporte HTTP propio que conserve el cuerpo del `404`: cumple FR-12, pero es mucho más
+  código y toca cómo se autentica.
+- Aclarar FR-12 ("en el caso exitoso") para permitir el listado: una revisión de spec para
+  distinguir algo que no se necesita.
+
+**Consecuencias:**
+- Se pierde la pista de la `/` final: `gcsgrep timeout gs://b/logs/app` (sin barra) ahora dice
+  solo `not found: gs://b/logs/app`. Se puede volver a agregar con otra revisión de spec.
+- Un prefijo sin objetos en un bucket que existe sigue siendo `1` (FR-15): eso no es un recurso
+  inexistente.
+- Un `404` al leer un objeto ya listado (borrado entre el listado y la lectura) es un fallo de
+  lectura (FR-29), no `not found`.
+- **El código de la Iteración 1 no cambia.** Sigue con los mensajes provisionales de D-13
+  (`list error: storage: bucket doesn't exist`, `metadata error: storage: object doesn't
+  exist`); la Iteración 3 los reemplaza. Se implementa mapeando `ErrObjectNotExist` y
+  `ErrBucketNotExist`, sin requests extra.
+
+### D-18 · Un flag que exige valor y llega sin él es un error de uso
+
+**Decisión (cambia la spec, BR-4 y FR-26):** el valor de `--max` y de `--concurrency` es siempre el
+argumento que les sigue, sea cual sea (`--max -3` informa el valor `-3`). Si el flag es el último
+argumento: código `2` y `gcsgrep: flag <flag> requires a value`, sin operar contra GCS.
+
+**Por qué:** la Iteración 1 lo resolvió por su cuenta (D-08) sin que la spec dijera nada: un hueco
+sin VC, del tipo "lo decide el agente por vos". Se cerró extendiendo los dos requisitos y sus VCs
+(un caso más en VC-42 y en VC-26), sin requisito nuevo, así que la cuenta no cambia.
+
+**Alternativas descartadas:** un requisito nuevo (FR-39 y VC-51), que cambia los totales en la
+spec, el plan y la cobertura; y dejarlo como decisión de implementación, que deja la spec callada.
+
+**Consecuencias:** el código ya cumple para `--max`. El caso de `--max` se agrega a
+`TestVC42Parcial` cuando VC-42 cierre en la Iteración 2; el de `--concurrency` llega con el flag,
+en la Iteración 4.
+
+### D-19 · El cliente no debe pedir gzip: se ajusta el cliente, no BR-7
+
+**Medido** (servidor local que registra los headers; objeto real con `contentEncoding: gzip` y
+`cacheControl: no-cache`): `transcoded.log` ya llega como texto, pero el request envía
+`Accept-Encoding: gzip` en metadata y en lectura. No lo pide la librería (solo con
+`ReadCompressed`): lo agrega el transporte HTTP de Go, que descomprime por su cuenta. BR-7 exige
+que la lectura no lo pida.
+
+**Decisión:** se mantiene BR-7 tal como está y en la Iteración 2 se ajusta el cliente para que no
+pida gzip, de modo que sea GCS quien decida si descomprime. Se verifica con el servidor de prueba,
+que registra los headers, y con VC-45 contra `$B`, que tiene que seguir pasando.
+
+**Alternativa descartada:** relajar BR-7 y aceptar que el transporte descomprima. Es más barato,
+pero cambia la spec para acomodar un detalle de la librería, y un objeto con `no-transform` se
+buscaría como texto contra lo que dice BR-7 (ningún fixture lo cubre).
+
+**Consecuencia aceptada:** para un objeto con `Content-Encoding: gzip`, GCS descomprime del lado
+del servidor y viajan más bytes que con gzip en el cable. Es raro en el uso previsto, y el
+guardrail de costo cuenta objetos, no bytes.

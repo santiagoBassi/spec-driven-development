@@ -54,15 +54,15 @@ prueba. **No** figuran como "pasa".
 | VC-12 | FR-12 objeto puntual | `TestVC12Parcial` PASS: exit `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` | 🔸 |
 | VC-15 | FR-15 vacío no es error | `TestVC15Parcial` PASS: `gs://$B/no-existe/` → exit `1`, stdout y stderr vacíos | Bucket existente sin objetos (`fake/empty`) | 🔸 |
 | VC-41 | BR-3 tope de objetos | `TestVC41Parcial` PASS: `--max 5` aborta con el mensaje exacto; `--max 6` → exit `0` | Tope por defecto de 1000 y que no se pida la página siguiente | 🔸 |
-| VC-42 | BR-4 `--max` | `TestVC42Parcial` PASS: `0`, `-3`, `abc`, `1.5` → exit `2` con el mensaje exacto, chequeo P | `--max unlimited` leyendo 2500 objetos | 🔸 |
+| VC-42 | BR-4 `--max` | `TestVC42Parcial` PASS: `0`, `-3`, `abc`, `1.5` → exit `2` con el mensaje exacto, chequeo P | `--max unlimited` leyendo 2500 objetos, y `--max` sin valor (caso agregado a la spec tras la Iteración 1; el código ya lo cumple) | 🔸 |
 
 ### Iteraciones siguientes
 
 | Iteración | VCs | Estado |
 |---|---|---|
 | 2 · Servidor de prueba, sniffing, `-c`/`-l` | VC-2, 10, 11, 17, 18, 19, 20, 43, 44, 45 (y cerrar 12, 15, 41, 42) | ⬜ |
-| 3 · Errores de GCS y fallos de red | VC-13, 16, 29, 30, 31, 32, 33, 34, 50 | ⬜ |
-| 4 · Concurrencia, progreso y parser estricto | VC-24, 25, 26, 27, 28, 36, 37, 38 | ⬜ |
+| 3 · Errores de GCS y fallos de red | VC-13, 16 (ahora con un solo mensaje `not found`), 29, 30, 31, 32, 33, 34, 50 | ⬜ |
+| 4 · Concurrencia, progreso y parser estricto | VC-24, 25, 26 (con `--concurrency` sin valor), 27, 28, 36, 37, 38 | ⬜ |
 | 5 · NFRs y scripting | VC-47, 48, 49 | ⬜ |
 
 ## Evidencia que se ejecutó
