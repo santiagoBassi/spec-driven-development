@@ -63,4 +63,7 @@ func TestVC42Parcial(t *testing.T) {
 				"--max", v, "timeout", logs)
 		})
 	}
+	t.Run("without value", func(t *testing.T) {
+		requireUsageError(t, exact("gcsgrep: flag --max requires a value"), "timeout", logs, "--max")
+	})
 }

@@ -54,7 +54,7 @@ prueba. **No** figuran como "pasa".
 | VC-12 | FR-12 objeto puntual | `TestVC12Parcial` PASS: exit `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` | 🔸 |
 | VC-15 | FR-15 vacío no es error | `TestVC15Parcial` PASS: `gs://$B/no-existe/` → exit `1`, stdout y stderr vacíos | Bucket existente sin objetos (`fake/empty`) | 🔸 |
 | VC-41 | BR-3 tope de objetos | `TestVC41Parcial` PASS: `--max 5` aborta con el mensaje exacto; `--max 6` → exit `0` | Tope por defecto de 1000 y que no se pida la página siguiente | 🔸 |
-| VC-42 | BR-4 `--max` | `TestVC42Parcial` PASS: `0`, `-3`, `abc`, `1.5` → exit `2` con el mensaje exacto, chequeo P | `--max unlimited` leyendo 2500 objetos, y `--max` sin valor (caso agregado a la spec tras la Iteración 1; el código ya lo cumple) | 🔸 |
+| VC-42 | BR-4 `--max` | `TestVC42Parcial` PASS: `0`, `-3`, `abc`, `1.5` → exit `2` con el mensaje exacto; `--max` sin valor → exit `2`, `gcsgrep: flag --max requires a value` (D-20); todos con chequeo P | `--max unlimited` leyendo 2500 objetos | 🔸 |
 
 ### Iteraciones siguientes
 
@@ -87,6 +87,24 @@ PASS
 ok  gcsgrep/e2e  48.493s
 ```
 
+**Corrida posterior al cierre** (2026-09-23, partida: commit `5da1857` más el caso de D-20). En otra
+máquina: macOS 26.6.2 (arm64), Go 1.27.1, `GOTOOLCHAIN=local`; mismo bucket y mismas identidades.
+Reproduce el resultado del cierre y agrega la evidencia de `--max` sin valor para VC-42 (D-20).
+
+```bash
+$ go vet ./...                       # sin hallazgos; gofmt -l . vacío
+$ go test ./internal/... -count=1    # ok en cli, location y search
+$ go build -o gcsgrep ./cmd/gcsgrep
+$ go test ./e2e -count=1 -v
+--- PASS: TestVC01, 03, 04, 05, 06, 07, 08, 09, 14, 21, 22, 23, 35, 39, 40, 46
+--- PASS: TestVC12Parcial, TestVC15Parcial, TestVC41Parcial, TestVC42Parcial
+    --- PASS: TestVC42Parcial/without_value
+    zz_vc39_test.go:30: 23 objects in the bucket, identical (name, generation, metageneration)
+                        before and after the suite
+PASS
+ok  gcsgrep/e2e  39.884s
+```
+
 Comprobaciones adicionales, que respaldan cómo se lee la tabla:
 
 - **El chequeo P observa algo.** Se comprobó aparte que el listener registra una conexión cuando la
@@ -104,4 +122,3 @@ Comprobaciones adicionales, que respaldan cómo se lee la tabla:
 2. Los cuatro VCs con evidencia parcial no figuran como "pasa" hasta la Iteración 2.
 3. De los 16 VCs de la Iteración 1, 11 ejercitan fallas o bordes (VC-3, 5, 6, 9, 14, 21, 22, 23, 35,
    40, 46); no es una tabla de caminos felices.
-4. Un punto del entorno no se pudo verificar: la alerta de presupuesto de USD 1.

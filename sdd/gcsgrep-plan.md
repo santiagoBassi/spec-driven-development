@@ -42,7 +42,7 @@ Todo corre sobre una cuenta con el *Always Free* de Cloud Storage: 5 GB-mes en
 
 | Recurso | Qué es | Se prepara en |
 |---|---|---|
-| `$B` = `gs://sdd-fardenghi-itba` | Bucket de fixtures, `us-east1`, Standard, *public access prevention* activado. Ya tiene los 22 fixtures con la metadata de `sniffing/` correcta | Existe; en la Iteración 1 se sube `data/acentos.log` |
+| `$B` = `gs://sdd-fardenghi-itba` | Bucket de fixtures, `us-east1`, Standard, *public access prevention* activado. Tiene los 23 fixtures, con la metadata de `sniffing/` correcta | Existe; `data/acentos.log` se subió en la Iteración 1 |
 | `lectora` | Service account con solo `roles/storage.objectViewer` sobre `$B` | Iteración 1 |
 | `sin-acceso` | Service account sin ningún rol sobre `$B` | Iteración 1 |
 | Listener de conexiones | `nc -lk 127.0.0.1 <puerto>`, para el chequeo P y VC-35 | Iteración 1 |
@@ -53,8 +53,7 @@ Todo corre sobre una cuenta con el *Always Free* de Cloud Storage: 5 GB-mes en
 operaciones clase A (listados), unas 40 clase B (lecturas) y baja unos 3 MB: alcanza
 para cientos de corridas por mes. La Iteración 5 es la única que mueve volumen:
 ~1,2 GB almacenados, ~1100 operaciones clase A de subida, ~3100 lecturas y ~4 GB de
-egress para tres mediciones. Entra en el free tier. Se configura una alerta de
-presupuesto de USD 1 antes de la Iteración 1.
+egress para tres mediciones. Entra en el free tier.
 
 ---
 
@@ -132,8 +131,7 @@ nada, sin ampliar su acceso y sin poder escanear un bucket enorme por error.
 - Lectura por streaming, **secuencial** (un objeto por vez), con recorte de `\r`;
   se busca en cada línea completa y se retiene solo su primer MiB para imprimir.
 - Acceso denegado (`403`) en listado o metadata → `gcsgrep: access denied: <ubicación>`.
-- Entorno: subir `data/acentos.log` a `$B`, crear `lectora` y `sin-acceso`, alerta de
-  presupuesto.
+- Entorno: subir `data/acentos.log` a `$B`, crear `lectora` y `sin-acceso`.
 
 **Fuera de alcance de esta iteración:** servidor de prueba, sniffing de binarios (los
 objetos no-texto se leen como bytes), `-c`, `-l`, marcadores de carpeta, el mensaje
@@ -170,7 +168,7 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
 | VC-12 (FR-12) | `./gcsgrep timeout gs://$B/logs/app/api.log` → `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` |
 | VC-15 (FR-15) | `gs://$B/no-existe/` → `1`, stdout y stderr vacíos | Bucket existente sin objetos (`fake/empty`) |
 | VC-41 (BR-3) | `--max 5` sobre `edge-cases/` aborta con el mensaje exacto; `--max 6` → `0` | Tope por defecto de 1000 y que no se pida la página siguiente |
-| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, cumplen el chequeo P | `--max unlimited` leyendo 2500 objetos, y `--max` sin valor (agregado a la spec al cerrar esta iteración; el código ya lo implementa) |
+| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, cumplen el chequeo P | `--max unlimited` leyendo 2500 objetos. El caso de `--max` sin valor, agregado a la spec al cerrar esta iteración, ya tiene evidencia en `TestVC42Parcial` |
 
 **Demostrable así:**
 

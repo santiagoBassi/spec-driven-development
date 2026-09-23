@@ -108,9 +108,6 @@ ni `setIamPolicy`. `sin-acceso` → ninguno. Es lo que hace que VC-39 demuestre 
 
 ## Sin verificar en esta iteración
 
-- **La alerta de presupuesto de USD 1** (parte del entorno del plan): es una configuración de facturación
-  del proyecto y no se pudo comprobar desde acá. Sigue pendiente de confirmar por quien administra el
-  proyecto.
 - **El gate corre dentro de una sola máquina.** El chequeo P y VC-35 asumen que la máquina está fuera de
   GCP (sin servidor de metadata); acá lo está.
 

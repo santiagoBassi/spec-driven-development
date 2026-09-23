@@ -254,3 +254,17 @@ buscaría como texto contra lo que dice BR-7 (ningún fixture lo cubre).
 **Consecuencia aceptada:** para un objeto con `Content-Encoding: gzip`, GCS descomprime del lado
 del servidor y viajan más bytes que con gzip en el cable. Es raro en el uso previsto, y el
 guardrail de costo cuenta objetos, no bytes.
+
+### D-20 · El caso de `--max` sin valor se verifica antes de que cierre VC-42
+
+**Decisión:** el caso que agregó D-18 a VC-42 (`gcsgrep timeout gs://$B/logs/ --max` → código `2` y
+`gcsgrep: flag --max requires a value`, con el chequeo P) entra ahora a `TestVC42Parcial`, sin esperar
+a la Iteración 2 como decía D-18.
+
+**Por qué:** no necesita el servidor de prueba, y el código ya lo cumplía. Hasta ahora solo lo cubría
+un unitario de `internal/cli`, que no observa el chequeo P, así que la spec pedía algo que ningún
+test e2e ejercitaba.
+
+**Consecuencias:** VC-42 sigue con evidencia parcial (🔸); solo le falta `--max unlimited` sobre 2500
+objetos contra el servidor de prueba. El caso de `--concurrency` sin valor sigue en la Iteración 4,
+con el flag.

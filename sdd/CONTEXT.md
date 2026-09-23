@@ -18,9 +18,6 @@ tabla por VC está en [`gcsgrep-cobertura-vc.md`](./gcsgrep-cobertura-vc.md).
 | 2 · Servidor de prueba, sniffing, `-c`/`-l` | Siguiente. No empezada |
 | 3 a 5 | No empezadas |
 
-Un punto del entorno de la Iteración 1 **no se pudo verificar**: la alerta de presupuesto de
-USD 1 (facturación del proyecto). Lo confirma quien administra el proyecto.
-
 **Spec revisada de nuevo tras cerrar la Iteración 1** (sigue en 50 requisitos y 50 VCs):
 - FR-13 y FR-16 informan un recurso inexistente con un solo mensaje,
   `gcsgrep: not found: <ubicación>` (D-17).
@@ -69,9 +66,6 @@ sdd/                       todos los artefactos del pipeline SDD de este proyect
   DECISIONS.md               decisiones no obvias, solo se agrega
   iterations/NN-*.md         un registro inmutable por iteración cerrada
 ```
-
-Fuera de `sdd/` quedan el material que entrega la cátedra (`enunciado.md`,
-`gcsgrep-requirements.md`, `docs/`, `ejemplo1/`) y el código.
 
 Dependencias entre paquetes: `cli` usa `location` y `search`; `gcs` no conoce `search`;
 `search` no conoce GCS (recibe un `io.Reader`); `cmd/gcsgrep` une todo.
@@ -123,7 +117,7 @@ admite. Hay que ajustar el cliente para que no lo pida y verificarlo con el serv
 (que registra headers) y con VC-45 contra `$B`.
 
 **Para no perder de vista:**
-- El caso de `--max` sin valor se agrega a `TestVC42Parcial` cuando VC-42 cierre en esta iteración
-  (D-18); el código ya lo cumple.
+- El caso de `--max` sin valor (D-18) ya está en `TestVC42Parcial` y pasa (D-20); a VC-42 solo le falta
+  `--max unlimited` sobre 2500 objetos.
 - VC-13 y VC-16 de la Iteración 3 cambiaron con la spec (un solo mensaje `not found`, D-17). No hay
   nada que hacer antes de esa iteración.

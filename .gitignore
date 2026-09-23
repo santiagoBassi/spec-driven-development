@@ -4,3 +4,10 @@ test-fixtures.zip
 # Claves de service accounts de las identidades de prueba: nunca se versionan
 /lectora.json
 /sin-acceso.json
+
+# Archivos de macOS
+.DS_Store
+
+# Material de la cátedra: no forma parte de la entrega
+/docs/
+/ejemplo/

@@ -14,6 +14,9 @@
 >   prefijo. Se quita la pista de la `/` final.
 > - BR-4 y FR-26 fijan qué pasa cuando `--max` o `--concurrency` llegan sin valor.
 >
+> El entorno de verificación admite Linux o macOS (VC-37 sigue exigiendo Linux), como
+> ya decía el plan. Ningún requisito ni VC cambió.
+>
 > Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md).
 >
 > Regla estructural: **cada FR, cada BR y cada NFR tiene un VC, y cada VC corresponde
@@ -86,8 +89,8 @@ Cada uno de estos es una decisión tomada, no un olvido:
 Los VCs se ejecutan contra estos entornos. Construirlos es parte del plan, no de la
 spec.
 
-- **Plataforma.** Linux, salvo donde un VC indique otra cosa. `script` es el de
-  util-linux.
+- **Plataforma.** Linux o macOS, salvo donde un VC indique otra cosa (VC-37 exige
+  Linux). `script` es el de util-linux.
 - **Identidades.** Se usan como ADC al ejecutar los VCs.
   - `lectora`: una service account con **solo** `roles/storage.objectViewer` sobre
     `$B`. Todos los VCs contra `$B` corren con esta identidad.
