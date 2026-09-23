@@ -171,8 +171,6 @@ GCS real y se eliminó en vez de dejar código sin verificar.
 **Consecuencias:**
 - Son secretos de larga vida. Están en `.gitignore` (`/lectora.json`, `/sin-acceso.json`), con
   permisos `0600`. **Nunca se versionan**; conviene rotarlas o borrarlas al terminar el ejercicio.
-- Su contenido apareció en la conversación de trabajo con el agente, así que hay que
-  considerarlas expuestas más allá de la máquina local.
 - El scope de solo lectura (D-03) aplica por construcción: `gcs.Credentials` lo pasa a
   `FindDefaultCredentials`, y con una clave de service account el token se pide con él. No se
   inspeccionó el token que usa la herramienta; lo que sí se comprobó es que la identidad no tiene
