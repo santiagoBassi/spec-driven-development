@@ -142,22 +142,22 @@ progreso, flags combinados o repetidos.
 
 **Criterios de éxito**
 
-- [ ] VC-1 pasa — literal bajo un prefijo, formato `gs://bucket/objeto:texto`
-- [ ] VC-3 pasa — el patrón es literal sin `-E`
-- [ ] VC-4 pasa — regex RE2 con `-E`
-- [ ] VC-5 pasa — regex inválida → `2`, cumple el chequeo P
-- [ ] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
-- [ ] VC-7 pasa — `-i`, también con `Ñ`/`Á` y `LANG=C`
-- [ ] VC-8 pasa — `-n` numera desde `1`
-- [ ] VC-9 pasa — recorte de `\r` en líneas `\r\n`
-- [ ] VC-14 pasa — ubicaciones inválidas → `2`, cumple el chequeo P
-- [ ] VC-21 pasa — todo lo que sigue a `--` es posicional
-- [ ] VC-22 pasa — flag desconocido → `2`, cumple el chequeo P
-- [ ] VC-23 pasa — cantidad de posicionales distinta de dos → `2`, cumple el chequeo P
-- [ ] VC-35 pasa — sin ADC → `2`, ninguna conexión al listener
-- [ ] VC-39 pasa — la suite de esta iteración corre con `lectora` y `$B` no cambia
-- [ ] VC-40 pasa — `access denied` con `sin-acceso`, match con `lectora`
-- [ ] VC-46 pasa — un match literal tardío y una regex que atraviesa el primer
+- [x] VC-1 pasa — literal bajo un prefijo, formato `gs://bucket/objeto:texto`
+- [x] VC-3 pasa — el patrón es literal sin `-E`
+- [x] VC-4 pasa — regex RE2 con `-E`
+- [x] VC-5 pasa — regex inválida → `2`, cumple el chequeo P
+- [x] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
+- [x] VC-7 pasa — `-i`, también con `Ñ`/`Á` y `LANG=C`
+- [x] VC-8 pasa — `-n` numera desde `1`
+- [x] VC-9 pasa — recorte de `\r` en líneas `\r\n`
+- [x] VC-14 pasa — ubicaciones inválidas → `2`, cumple el chequeo P
+- [x] VC-21 pasa — todo lo que sigue a `--` es posicional
+- [x] VC-22 pasa — flag desconocido → `2`, cumple el chequeo P
+- [x] VC-23 pasa — cantidad de posicionales distinta de dos → `2`, cumple el chequeo P
+- [x] VC-35 pasa — sin ADC → `2`, ninguna conexión al listener
+- [x] VC-39 pasa — la suite de esta iteración corre con `lectora` y `$B` no cambia
+- [x] VC-40 pasa — `access denied` con `sin-acceso`, match con `lectora`
+- [x] VC-46 pasa — un match literal tardío y una regex que atraviesa el primer
   MiB se reportan con salida truncada en `...`
 
 **Implementado, pero el VC cierra en la Iteración 2.** Estos requisitos se construyen
