@@ -92,7 +92,7 @@ verifica mensaje y cero conexiones. Desde la Iteración 2, el servidor de prueba
 dentro del proceso de test (`httptest`), así cada test lee su registro de requests e
 inyecta fallas sin procesos extra.
 
-**Memoria persistente** (ver [`docs/guia-sdd.md`](./docs/guia-sdd.md)):
+**Memoria persistente**:
 
 | Archivo | Se crea en | Cómo evoluciona |
 |---|---|---|

@@ -1,7 +1,6 @@
 # gcsgrep — spec
 
-> **Estado: revisada.** Pasó el gate de revisión de
-> [`docs/guia-sdd.md`](./docs/guia-sdd.md) sin preguntas abiertas. Revisada de nuevo
+> **Estado: revisada.** Pasó el gate de revisión sin preguntas abiertas. Revisada de nuevo
 > tras ajustar el entorno de verificación a un único bucket de fixtures, un bucket de
 > performance y ningún bucket sin acceso, y el umbral de NFR-1 a la región del bucket.
 > Ningún FR ni BR cambió.
