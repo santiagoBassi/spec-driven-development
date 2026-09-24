@@ -98,11 +98,9 @@ consume unas pocas operaciones de listado y lectura (cabe de sobra en el free ti
 
 ## Entorno
 
-- **Bucket `$B`:** `gs://sdd-fardenghi-itba` (`us-east1`, Standard), proyecto
-  `sat-spec-driven-development`. 23 objetos: los fixtures de `test-fixtures/` sin el `README.md`.
+- **Bucket `$B`:** `gs://sdd-fardenghi-itba` (`us-east1`, Standard). 23 objetos: los fixtures de
+  `test-fixtures/` sin el `README.md`.
 - **`lectora`:** solo `storage.objects.get` y `storage.objects.list`. **`sin-acceso`:** nada.
-- La cuenta de `gcloud` activa en esta máquina tiene la sesión vencida; no hace falta para la suite
-  (los tokens salen de las claves).
 - `go.mod` está fijado a `go 1.22` a propósito (D-01).
 - El binario `./gcsgrep` está en `.gitignore`.
 

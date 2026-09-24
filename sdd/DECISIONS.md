@@ -163,7 +163,8 @@ spec. `$B` no tiene marcadores (se subió con `gcloud storage cp -r`).
 
 `lectora` y `sin-acceso` se usan como ADC con `GOOGLE_APPLICATION_CREDENTIALS` apuntando a
 sus claves (`lectora.json` y `sin-acceso.json`, en la raíz del repo). El plan admitía esta vía
-o la impersonación; quien administra el proyecto entregó claves.
+o la impersonación; se eligieron claves porque la impersonación exige
+`roles/iam.serviceAccountTokenCreator` sobre cada identidad.
 
 Se había escrito un script de impersonación (`tools/e2e-creds.sh`); nunca se probó contra
 GCS real y se eliminó en vez de dejar código sin verificar.

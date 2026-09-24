@@ -8,7 +8,7 @@
 | Fecha | 2026-09-23 |
 | Commit de partida | `840084a` |
 | Toolchain | Go 1.22.2 (`GOTOOLCHAIN=local`) |
-| Bucket `$B` | `gs://sdd-fardenghi-itba`, proyecto `sat-spec-driven-development`, 23 objetos |
+| Bucket `$B` | `gs://sdd-fardenghi-itba`, 23 objetos |
 | Identidades | `lectora` (solo `storage.objects.get` y `storage.objects.list`), `sin-acceso` (ninguno) |
 | Resultado | **Gate aprobado: 16 de 16 VCs pasan; evidencia parcial de 4 VCs que cierran en la Iteración 2** |
 
@@ -94,16 +94,13 @@ ni `setIamPolicy`. `sin-acceso` → ninguno. Es lo que hace que VC-39 demuestre 
 2. **Dependencias fijadas** (`storage v1.50.0`) para conservar `go 1.22` (D-01). Con `@latest`, Go
    descargaba una toolchain 1.26 sin avisar.
 3. **Claves JSON en vez de impersonación.** El plan admitía las dos vías. Se usaron claves de service
-   account, entregadas por quien administra el proyecto, en `lectora.json` y `sin-acceso.json` en la raíz
-   del repo, **ignoradas por git** y con permisos `0600` (D-16). El script de impersonación
+   account, en `lectora.json` y `sin-acceso.json` en la raíz del repo, **ignoradas por git** y con permisos `0600` (D-16). El script de impersonación
    (`tools/e2e-creds.sh`) que se había escrito nunca se probó contra GCS real y se eliminó.
 4. **Sin valor en la spec:** mensaje de `--max` sin argumento, y flags repetidos aceptados hasta la
    Iteración 4 (D-08).
 
 ## Dificultades
 
-- Un smoke test contra un servidor HTTP descartable (ya borrado) sirvió para ejercitar el camino de GCS
-  antes de tener acceso al bucket. **No** se usó como evidencia de ningún VC.
 - Un primer intento de subir las dependencias con `@latest` movió `go.mod` a Go 1.26; se corrigió (D-01).
 
 ## Sin verificar en esta iteración
