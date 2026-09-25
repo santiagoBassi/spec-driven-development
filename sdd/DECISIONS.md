@@ -267,3 +267,32 @@ test e2e ejercitaba.
 **Consecuencias:** VC-42 sigue con evidencia parcial (🔸); solo le falta `--max unlimited` sobre 2500
 objetos contra el servidor de prueba. El caso de `--concurrency` sin valor sigue en la Iteración 4,
 con el flag.
+
+### D-21 · Requisitos hermanos con sufijo; los identificadores no se renumeran
+
+**Decisión (cambia la spec):** un requisito cuyo Dado o Cuando tenía alternativas, o cuyo Entonces
+necesitaba más de una ejecución para observarse, se parte en requisitos atómicos que conservan el
+número con un sufijo (`FR-13a`, `FR-13b`), cada uno con su VC (`VC-13a`, `VC-13b`). Un requisito
+nuevo sobre un tema existente entra como hermano con el siguiente sufijo (`FR-9b`, `FR-29b`). Los VCs
+de las BR y los NFR siguen siendo VC-39 a VC-50. La spec pasa a 65 requisitos (53 FR, 9 BR, 3 NFR) y
+65 VCs.
+
+**Por qué:** un identificador publicado es una referencia. Lo citan el plan, la cobertura, este
+registro, los tests de `e2e/` y el registro inmutable de la Iteración 1. Con sufijos, cada
+referencia existente sigue apuntando al mismo tema, y ninguna queda apuntando en silencio a otro
+requisito.
+
+**Alternativa descartada:** renumerar todo de corrido (FR-1 a FR-53). La spec queda más prolija,
+pero cada partición corre los números siguientes. Una referencia olvidada sigue resolviendo, pero a
+otro requisito, y los registros anteriores dejan de coincidir con la spec.
+
+**Consecuencias:**
+- Las menciones de D-17 y D-18 corresponden a la numeración anterior: FR-13 hoy es FR-13a y FR-13b,
+  FR-16 es FR-16a y FR-16b, y el caso de `--concurrency` sin valor de FR-26 es FR-26d. La cuenta de
+  "50 requisitos y 50 VCs" pasa a 65.
+- Los tests llevan el sufijo del VC (`TestVC09a`, `TestVC15b`). VC-9b y VC-15b quedan cubiertos por
+  el código de la Iteración 1: `TestVC09b` (con `data/sin_salto_final.txt` subido a `$B`) y
+  `TestVC15b` pasan contra GCS real.
+- Lo que D-08 resolvió en el parser sin que la spec lo dijera queda fijado en la spec: el valor va
+  solo con dígitos, en BR-4 y FR-26c (`+5` y ` 5` en VC-42 y VC-26c), y un entero más grande que un
+  `int` es un tope válido de `--max`, en BR-4 (VC-42).

@@ -121,7 +121,7 @@ type result struct {
 }
 
 // readAll searches every object with a pool of workers. An object that fails is
-// reported and the rest go on; the run then exits with 2 (FR-29).
+// reported and the rest go on; the run then exits with 2 (FR-29a).
 func readAll(ctx context.Context, cancel context.CancelFunc, client *gcs.Client, cfg *cli.Config, p *output.Printer, objects []string) result {
 	var (
 		matches atomic.Int64

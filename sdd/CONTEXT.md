@@ -7,21 +7,21 @@
 
 ## Estado
 
-**Iteración 1 cerrada.** Sus 16 VCs pasan contra GCS real (2026-09-23). El registro, con
+**Iteración 1 cerrada.** Sus 18 VCs pasan contra GCS real (última corrida completa: 2026-09-25). El registro, con
 comandos, resultados, desvíos y handoff, está en
 [`iterations/01-busqueda-punta-a-punta.md`](./iterations/01-busqueda-punta-a-punta.md). La
 tabla por VC está en [`gcsgrep-cobertura-vc.md`](./gcsgrep-cobertura-vc.md).
 
 | Iteración | Estado |
 |---|---|
-| 1 · Búsqueda de punta a punta | **Cerrada.** 16 de 16 VCs pasan |
+| 1 · Búsqueda de punta a punta | **Cerrada.** 18 de 18 VCs pasan |
 | 2 · Servidor de prueba, sniffing, `-c`/`-l` | Siguiente. No empezada |
 | 3 a 5 | No empezadas |
 
-**Spec revisada de nuevo tras cerrar la Iteración 1** (sigue en 50 requisitos y 50 VCs):
-- FR-13 y FR-16 informan un recurso inexistente con un solo mensaje,
+**Spec revisada de nuevo tras cerrar la Iteración 1** (65 requisitos y 65 VCs):
+- FR-13a, FR-13b, FR-16a y FR-16b informan un recurso inexistente con un solo mensaje,
   `gcsgrep: not found: <ubicación>` (D-17).
-- BR-4 y FR-26 fijan qué pasa con `--max` o `--concurrency` sin valor (D-18).
+- BR-4 y FR-26d fijan qué pasa con `--max` o `--concurrency` sin valor (D-18).
 
 El **código no cambió**: sigue con los mensajes provisionales de D-13, que la Iteración 3
 reemplaza. El registro `iterations/01` no se toca (es inmutable): lo aprendido vive acá, en
@@ -59,7 +59,7 @@ lectora.json, sin-acceso.json   claves de las identidades de prueba. IGNORADAS p
 
 sdd/                       todos los artefactos del pipeline SDD de este proyecto (sin la teoría)
   gcsgrep-base-context.md    base context: requerimientos refinados, diseño, arquitectura
-  gcsgrep-spec.md            la spec revisada: 50 requisitos, 50 VCs
+  gcsgrep-spec.md            la spec revisada: 65 requisitos, 65 VCs
   gcsgrep-plan.md            el plan de iteraciones y el alcance diferido
   gcsgrep-cobertura-vc.md    una fila por VC: con qué se ejercita y qué se observó
   CONTEXT.md                 este archivo: estado vivo, se reescribe
@@ -98,7 +98,7 @@ consume unas pocas operaciones de listado y lectura (cabe de sobra en el free ti
 
 ## Entorno
 
-- **Bucket `$B`:** `gs://sdd-fardenghi-itba` (`us-east1`, Standard). 23 objetos: los fixtures de
+- **Bucket `$B`:** `gs://sdd-fardenghi-itba` (`us-east1`, Standard). 24 objetos: los fixtures de
   `test-fixtures/` sin el `README.md`.
 - **`lectora`:** solo `storage.objects.get` y `storage.objects.list`. **`sin-acceso`:** nada.
 - `go.mod` está fijado a `go 1.22` a propósito (D-01).
@@ -107,7 +107,7 @@ consume unas pocas operaciones de listado y lectura (cabe de sobra en el free ti
 ## Lo que sigue (Iteración 2)
 
 Ver el handoff en el registro de la Iteración 1. En corto: servidor de prueba con `httptest`,
-sniffing (BR-6/BR-7), `-c` y `-l`, marcadores de carpeta, y cerrar VC-12, 15, 41 y 42.
+sniffing (BR-6/BR-7), `-c` y `-l`, marcadores de carpeta, y cerrar VC-12, 15a, 41 y 42.
 
 **A resolver primero: transcoding (VC-45).** Ya está medido (D-19): `transcoded.log` llega como
 texto, pero el request envía `Accept-Encoding: gzip`, que agrega el transporte HTTP de Go y BR-7 no
@@ -115,7 +115,8 @@ admite. Hay que ajustar el cliente para que no lo pida y verificarlo con el serv
 (que registra headers) y con VC-45 contra `$B`.
 
 **Para no perder de vista:**
-- El caso de `--max` sin valor (D-18) ya está en `TestVC42Parcial` y pasa (D-20); a VC-42 solo le falta
+- El caso de `--max` sin valor (D-18) ya está en `TestVC42Parcial` y pasa (D-20), igual que `+5` y
+  ` 5`; el entero más grande que un `int` pasa en `TestVC42ParcialEnteroGrande`. A VC-42 solo le falta
   `--max unlimited` sobre 2500 objetos.
-- VC-13 y VC-16 de la Iteración 3 cambiaron con la spec (un solo mensaje `not found`, D-17). No hay
+- VC-13a, VC-13b, VC-16a y VC-16b de la Iteración 3 usan un solo mensaje `not found` (D-17). No hay
   nada que hacer antes de esa iteración.

@@ -66,13 +66,13 @@ func NewScanner() *Scanner {
 }
 
 // Scan reads r to the end and calls onMatch for every line that re matches, in
-// order. A line ends at "\n", or at the end of r; one "\r" just before the
-// terminator is dropped (FR-9) before matching and before printing. The
+// order. A line ends at "\n", or at the end of r (FR-9b); one "\r" just before
+// the terminator is dropped (FR-9a) before matching and before printing. The
 // terminator is not part of the line, so "$" matches at its end.
 //
 // It stops at the first error from r or from onMatch and returns it. Lines
 // already reported stay reported, but the line being read when r failed is not
-// matched.
+// matched (FR-29b).
 func (s *Scanner) Scan(r io.Reader, re *regexp.Regexp, onMatch func(Line) error) error {
 	s.br.Reset(r)
 	for no := int64(1); ; no++ {

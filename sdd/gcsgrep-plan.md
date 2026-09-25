@@ -1,7 +1,7 @@
 # gcsgrep — plan de iteraciones
 
 > Salida del paso **Planificar**, a partir de [`gcsgrep-spec.md`](./gcsgrep-spec.md)
-> (revisada, 50 requisitos, 50 VCs, 0 huérfanos).
+> (revisada, 65 requisitos, 65 VCs, 0 huérfanos).
 >
 > Cada iteración es un contrato chico y verificable: termina con código andando y
 > sus VCs pasando, **más todos los VCs de las iteraciones anteriores**. La siguiente
@@ -25,12 +25,12 @@ las siguientes, a medida que hacen falta cosas que GCS real no deja observar
 
 | Iteración | Entrega | Implementa | VCs que cierra |
 |---|---|---|---|
-| 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-9, FR-12, FR-14, FR-15, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 16 |
-| 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17 a FR-20, BR-5 a BR-7 | 14 (10 propios + VC-12, 15, 41, 42) |
-| 3 | Errores de GCS y fallos de red | FR-13, FR-16, FR-29 a FR-34, NFR-3 | 9 |
-| 4 | Concurrencia, progreso y parser estricto | FR-24 a FR-28, FR-36 a FR-38 | 8 |
+| 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-8, FR-9a, FR-9b, FR-12, FR-14, FR-15a, FR-15b, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 18 |
+| 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17a, FR-17b, FR-18a, FR-18b, FR-19, FR-20a a FR-20c, BR-5 a BR-7 | 18 (14 propios + VC-12, 15a, 41, 42) |
+| 3 | Errores de GCS y fallos de red | FR-13a, FR-13b, FR-16a, FR-16b, FR-29a, FR-29b, FR-30a, FR-30b, FR-31, FR-32, FR-33a, FR-33b, FR-34, NFR-3 | 14 |
+| 4 | Concurrencia, progreso y parser estricto | FR-24a, FR-24b, FR-25, FR-26a a FR-26d, FR-27, FR-28, FR-36 a FR-38 | 12 |
 | 5 | NFRs y contrato de scripting | BR-9, NFR-1, NFR-2 | 3 |
-| | | | **50** |
+| | | | **65** |
 
 ---
 
@@ -42,7 +42,7 @@ Todo corre sobre una cuenta con el *Always Free* de Cloud Storage: 5 GB-mes en
 
 | Recurso | Qué es | Se prepara en |
 |---|---|---|
-| `$B` = `gs://sdd-fardenghi-itba` | Bucket de fixtures, `us-east1`, Standard, *public access prevention* activado. Tiene los 23 fixtures, con la metadata de `sniffing/` correcta | Existe; `data/acentos.log` se subió en la Iteración 1 |
+| `$B` = `gs://sdd-fardenghi-itba` | Bucket de fixtures, `us-east1`, Standard, *public access prevention* activado. Tiene los 24 fixtures, con la metadata de `sniffing/` correcta | Existe; se completó con `data/acentos.log` y `data/sin_salto_final.txt` |
 | `lectora` | Service account con solo `roles/storage.objectViewer` sobre `$B` | Iteración 1 |
 | `sin-acceso` | Service account sin ningún rol sobre `$B` | Iteración 1 |
 | Listener de conexiones | `nc -lk 127.0.0.1 <puerto>`, para el chequeo P y VC-35 | Iteración 1 |
@@ -73,7 +73,8 @@ internal/search/    delimitar líneas, buscarlas completas y retener el primer M
                     de cada una para la salida
 internal/output/    registros completos a stdout; avisos y progreso a stderr
 internal/fakegcs/   servidor de prueba                                (Iteración 2)
-e2e/                un test por VC: TestVC01…TestVC50, invocan ./gcsgrep
+e2e/                un test por VC: TestVC01…TestVC50, con el sufijo del VC cuando
+                    lo tiene (TestVC13a); invocan ./gcsgrep
 ```
 
 **Verificación.** Cada VC es un test de `e2e/` con el número del VC en el nombre,
@@ -147,8 +148,10 @@ progreso, flags combinados o repetidos.
 - [x] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
 - [x] VC-7 pasa — `-i`, también con `Ñ`/`Á` y `LANG=C`
 - [x] VC-8 pasa — `-n` numera desde `1`
-- [x] VC-9 pasa — recorte de `\r` en líneas `\r\n`
+- [x] VC-9a pasa — recorte de `\r` en líneas `\r\n`
+- [x] VC-9b pasa — la última línea sin `\n` se busca y sale terminada en `\n`
 - [x] VC-14 pasa — ubicaciones inválidas → `2`, cumple el chequeo P
+- [x] VC-15b pasa — un prefijo sin objetos → `1`, stdout y stderr vacíos
 - [x] VC-21 pasa — todo lo que sigue a `--` es posicional
 - [x] VC-22 pasa — flag desconocido → `2`, cumple el chequeo P
 - [x] VC-23 pasa — cantidad de posicionales distinta de dos → `2`, cumple el chequeo P
@@ -166,9 +169,9 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
 | VC | Evidencia parcial en la Iteración 1 | Lo que falta observar |
 |---|---|---|
 | VC-12 (FR-12) | `./gcsgrep timeout gs://$B/logs/app/api.log` → `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` |
-| VC-15 (FR-15) | `gs://$B/no-existe/` → `1`, stdout y stderr vacíos | Bucket existente sin objetos (`fake/empty`) |
+| VC-15a (FR-15a) | El código trata igual un bucket vacío que un prefijo vacío, y VC-15b pasa | Bucket existente sin objetos (`empty`) |
 | VC-41 (BR-3) | `--max 5` sobre `edge-cases/` aborta con el mensaje exacto; `--max 6` → `0` | Tope por defecto de 1000 y que no se pida la página siguiente |
-| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, cumplen el chequeo P | `--max unlimited` leyendo 2500 objetos. El caso de `--max` sin valor, agregado a la spec al cerrar esta iteración, ya tiene evidencia en `TestVC42Parcial` |
+| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, cumplen el chequeo P. El caso de `--max` sin valor, agregado a la spec al cerrar esta iteración, ya tiene evidencia en `TestVC42Parcial` | `--max unlimited` leyendo 2500 objetos, y un N más grande que un entero → `0` |
 
 **Demostrable así:**
 
@@ -247,18 +250,23 @@ que la Iteración 1 dejó con evidencia parcial.
 - [ ] VC-2 pasa — sin matches en todo `$B` → `1`, exactamente 6 avisos
 - [ ] VC-10 pasa — `-l` sobre todo el bucket, 9 objetos
 - [ ] VC-11 pasa — `-l` bajo `data/`, nada de afuera
-- [ ] VC-17 pasa — marcadores de carpeta ignorados, pero cuentan para `--max`
-- [ ] VC-18 pasa — `-c` con conteos en `0` y todo en `0` → `1`
+- [ ] VC-17a pasa — marcadores de carpeta: no se leen, no se informan, no cuentan
+  en el progreso
+- [ ] VC-17b pasa — los marcadores cuentan para `--max`
+- [ ] VC-18a pasa — `-c` con un conteo por objeto, incluidos los `0`
+- [ ] VC-18b pasa — `-c` con todos los conteos en `0` → `1`
 - [ ] VC-19 pasa — `-l` corta la lectura en el primer match
-- [ ] VC-20 pasa — `-c -l`, `-n -c`, `-n -l` → `2`, cumple el chequeo P
+- [ ] VC-20a pasa — `-c` con `-l`, en los dos órdenes → `2`, cumple el chequeo P
+- [ ] VC-20b pasa — `-n` con `-c`, en los dos órdenes → `2`, cumple el chequeo P
+- [ ] VC-20c pasa — `-n` con `-l`, en los dos órdenes → `2`, cumple el chequeo P
 - [ ] VC-43 pasa — no-texto salteado sin contar como fallo
 - [ ] VC-44 pasa — bordes de la muestra de 512 bytes
 - [ ] VC-45 pasa — gzip salteado por contenido; `transcoded.log` se busca como texto
 - [ ] VC-12 pasa — objeto puntual sin request de listado *(implementado en la 1)*
-- [ ] VC-15 pasa — también con el bucket `empty` *(implementado en la 1)*
+- [ ] VC-15a pasa — el bucket `empty` → `1` *(implementado en la 1)*
 - [ ] VC-41 pasa — tope de 1000 sin paginar de más *(implementado en la 1)*
-- [ ] VC-42 pasa — `--max unlimited` sobre 2500 objetos, y `--max` sin valor → `2`,
-  cumple el chequeo P *(implementado en la 1)*
+- [ ] VC-42 pasa — `--max unlimited` sobre 2500 objetos, un N más grande que un entero
+  → `0`, y `--max` sin valor → `2`, cumple el chequeo P *(implementado en la 1)*
 - [ ] **VC-3 sigue pasando**, ahora con los no-texto salteados
 
 **A resolver primero: transcoding (VC-45).** Se midió al cerrar la Iteración 1:
@@ -289,27 +297,32 @@ resultado completo.
 
 **Alcance**
 
-- Recurso inexistente, con un solo mensaje, `gcsgrep: not found: <ubicación>`: FR-13
-  para objeto puntual (falte el objeto o el bucket) y FR-16 para bucket o prefijo.
-  No se distingue cuál falta.
-- Error de lectura de un objeto: aviso, se sigue con el resto, exit `2`.
+- Recurso inexistente, con un solo mensaje, `gcsgrep: not found: <ubicación>`: FR-13a y
+  FR-13b para objeto puntual (falte el objeto o el bucket), FR-16a y FR-16b para bucket
+  o prefijo. No se distingue cuál falta.
+- Error de lectura de un objeto: aviso, se sigue con el resto, exit `2`. Si la lectura
+  se corta a mitad, lo ya impreso queda y la línea incompleta no se busca.
 - Error de listado o de metadata: aborta sin leer.
 - Timeout por inactividad de 30 s en listado, metadata y lectura, contado desde el
   último byte recibido.
 - El servidor de prueba agrega la inyección de fallas por request: `500`, conexión
-  colgada y cuerpo en tramos espaciados.
+  colgada, cuerpo en tramos espaciados y corte de la conexión a mitad del cuerpo.
 
 **Criterios de éxito**
 
-- [ ] VC-13 pasa — `not found` para un objeto puntual inexistente y para uno en un
-  bucket inexistente
-- [ ] VC-16 pasa — `not found` para un bucket inexistente, con ubicación de bucket y
-  de prefijo
-- [ ] VC-29 pasa — un objeto que falla no frena al resto, exit `2`
-- [ ] VC-30 pasa — `list error` y `metadata error` abortan sin leer
+- [ ] VC-13a pasa — `not found` para un objeto puntual inexistente
+- [ ] VC-13b pasa — `not found` para un objeto puntual de un bucket inexistente
+- [ ] VC-16a pasa — `not found` para un bucket inexistente
+- [ ] VC-16b pasa — `not found` para un prefijo de un bucket inexistente
+- [ ] VC-29a pasa — un objeto que falla no frena al resto, exit `2`
+- [ ] VC-29b pasa — un corte a mitad de lectura deja lo ya impreso y descarta la línea
+  incompleta
+- [ ] VC-30a pasa — `list error` aborta sin leer
+- [ ] VC-30b pasa — `metadata error` aborta sin leer
 - [ ] VC-31 pasa — exactamente un request al recurso que falla
 - [ ] VC-32 pasa — lectura colgada → `timeout after 30s without data`
-- [ ] VC-33 pasa — listado o metadata colgados → abortan con el mismo detalle
+- [ ] VC-33a pasa — listado colgado → `list error` con el mismo detalle
+- [ ] VC-33b pasa — metadata colgada → `metadata error` con el mismo detalle
 - [ ] VC-34 pasa — una lectura lenta pero continua no se corta
 - [ ] VC-50 pasa — ≤ 35 s desde el request colgado hasta el exit
 
@@ -327,10 +340,13 @@ resultado completo.
   GCS real al cerrar la Iteración 1: bucket inexistente en el listado → `bucket doesn't
   exist`; objeto inexistente, o bucket inexistente con ubicación de objeto → `object
   doesn't exist`. No se hace ningún request extra, así que FR-12 no se toca.
-  Un prefijo sin objetos en un bucket que existe sigue siendo `1` (FR-15). Un `404` en la
+  Un prefijo sin objetos en un bucket que existe sigue siendo `1` (FR-15b). Un `404` en la
   lectura de un objeto ya listado (borrado entre el listado y la lectura) es un fallo de
-  lectura, FR-29, y no `not found`. Registrado en `DECISIONS.md` (D-17).
-- **VC-32, VC-33 y VC-34 tardan entre 30 y 60 s cada uno.** Corren en paralelo con
+  lectura, FR-29a, y no `not found`. Registrado en `DECISIONS.md` (D-17).
+- **Lo ya impreso no se retira (FR-29b).** El lector de líneas de la Iteración 1 ya se
+  comporta así: devuelve el error de lectura sin buscar la línea incompleta. Lo nuevo es
+  el corte en el servidor de prueba, que anuncia un `Content-Length` y cierra antes.
+- **VC-32, VC-33a, VC-33b y VC-34 tardan entre 30 y 60 s cada uno.** Corren en paralelo con
   `t.Parallel()` para que el gate no pase de unos pocos minutos.
 
 ---
@@ -353,10 +369,13 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 
 **Criterios de éxito**
 
-- [ ] VC-24 pasa — `-in`, `--max=5`, etc. → `2`, cumple el chequeo P
+- [ ] VC-24a pasa — `-in`, `-ic`, `-Ei` → `2`, cumple el chequeo P
+- [ ] VC-24b pasa — `--max=5`, `--concurrency=8` → `2`, cumple el chequeo P
 - [ ] VC-25 pasa — flag repetido → `2`, cumple el chequeo P
-- [ ] VC-26 pasa — máximo de lecturas simultáneas exactamente `4`, `1` y `8`, y
-  `--concurrency` sin valor → `2`, cumple el chequeo P
+- [ ] VC-26a pasa — sin el flag, máximo de lecturas simultáneas exactamente `4`
+- [ ] VC-26b pasa — con `--concurrency 1` y `8`, máximo exactamente `1` y `8`
+- [ ] VC-26c pasa — valores inválidos (incluidos `+5` y ` 5`) → `2`, cumple el chequeo P
+- [ ] VC-26d pasa — `--concurrency` sin valor → `2`, cumple el chequeo P
 - [ ] VC-27 pasa — varios errores de uso → una sola línea
 - [ ] VC-28 pasa — 10 corridas con `--concurrency 32` idénticas a la secuencial
 - [ ] VC-36 pasa — `| head -1` → `141`, stderr vacío, menos de 100 lecturas
@@ -367,8 +386,8 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 
 **Nota de regresión:** el default cambia de 1 a 4 workers. Los VCs de salida ya
 comparan líneas sin importar el orden entre objetos (convención de la spec), pero
-recién ahora eso se ejercita de verdad. VC-19 (corte de `-l`), VC-29 y VC-32 (fallo
-de un objeto con otros en paralelo) son los más sensibles.
+recién ahora eso se ejercita de verdad. VC-19 (corte de `-l`), VC-29a, VC-29b y VC-32
+(fallo de un objeto con otros en paralelo) son los más sensibles.
 
 **Nota de plataforma:** VC-37 exige Linux. En la laptop (macOS) se corre dentro de
 un contenedor `golang` con `util-linux`. El resto de la suite es portable.
@@ -397,7 +416,7 @@ umbral para que pase.
   ni `.go:` en todos los casos de falla
 - [ ] VC-48 pasa — mediana < 180 s con 1000 objetos de `$P` y ≥ 50 Mbps medidos
 - [ ] VC-49 pasa — pico ≤ 100 MiB con 1 GB y ≤ 20 MiB más que con 10 MB
-- [ ] **Los 50 VCs pasan en una misma corrida**, y `gcsgrep-cobertura-vc.md`
+- [ ] **Los 65 VCs pasan en una misma corrida**, y `gcsgrep-cobertura-vc.md`
   queda completo
 
 **Si VC-48 no pasa:** el umbral ya contempla la peor latencia medida a `us-east1`
@@ -430,7 +449,7 @@ por una revisión de spec, no por el plan.
 | Pedir confirmación antes de una corrida cara | Descartado: rompe el uso desde scripts |
 | Convertir codificaciones distintas de UTF-8 | Fuera de v1; BR-6 clasifica por la muestra inicial de hasta 512 bytes |
 | S3, Azure, interfaz web, API o librería | Descartado en v1 |
-| Consistencia ante objetos que cambian durante la lectura | Riesgo conocido, aceptado |
+| Consistencia ante objetos que cambian durante la lectura | Riesgo conocido, aceptado: una lectura es un único request y GCS sirve una sola generación, así que nunca mezcla versiones. Fijar la generación convertiría un reemplazo en error (fundamento en el base context) |
 
 ## Cuándo este plan se modifica y cuándo se vuelve a la spec
 
@@ -438,12 +457,12 @@ por una revisión de spec, no por el plan.
   conviene adelantar, un VC que resulta depender de algo de otra iteración.
 - **Se vuelve a la spec** si cambia el *qué*. Los dos candidatos que se identificaron al
   planificar se resolvieron al cerrar la Iteración 1:
-  - La distinción bucket/objeto inexistente **sí cambió el qué**: FR-13 y FR-16 informan
-    un mismo mensaje, `not found`.
+  - La distinción bucket/objeto inexistente **sí cambió el qué**: FR-13a, FR-13b, FR-16a
+    y FR-16b informan un mismo mensaje, `not found`.
   - El transcoding **no cambió el qué**: era de configuración del cliente (Iteración 2).
 
   Además, implementar la Iteración 1 llevó a la spec un hueco que no estaba previsto: qué
-  pasa con un flag que exige valor y llega sin él (BR-4 y FR-26).
+  pasa con un flag que exige valor y llega sin él (BR-4 y FR-26d).
 - **No se reescribe** el registro de una iteración terminada. Lo aprendido va a
   `CONTEXT.md`, `DECISIONS.md` y a las iteraciones futuras de este plan.
 

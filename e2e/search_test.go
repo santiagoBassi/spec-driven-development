@@ -122,8 +122,8 @@ func TestVC08(t *testing.T) {
 		api+":14:2026-09-22 10:50:23 ERROR Gateway timeout=504 from upstream payment service\n")
 }
 
-// FR-9
-func TestVC09(t *testing.T) {
+// FR-9a
+func TestVC09a(t *testing.T) {
 	crlf := gs(t, "data/windows_crlf.txt")
 
 	r := asLectora(t, "-n", "timeout", crlf)
@@ -135,6 +135,23 @@ func TestVC09(t *testing.T) {
 
 	r = asLectora(t, "-E", "Windows$", crlf)
 	requireExit(t, r, 0)
+}
+
+// FR-9b
+func TestVC09b(t *testing.T) {
+	obj := gs(t, "data/sin_salto_final.txt")
+	r := asLectora(t, "-n", "-E", "salto final$", obj)
+	requireExit(t, r, 0)
+	// The exact comparison includes the trailing "\n": the last byte of stdout is 0a.
+	requireStdout(t, r, obj+":2:Ultima linea sin salto final\n")
+}
+
+// FR-15b
+func TestVC15b(t *testing.T) {
+	r := asLectora(t, "timeout", gs(t, "no-existe/"))
+	requireExit(t, r, 1)
+	requireStdout(t, r, "")
+	requireStderr(t, r, "")
 }
 
 // FR-21

@@ -12,18 +12,19 @@ reglas de negocio y casos borde de `gcsgrep`.
 | `logs/app/worker.log` | Formato clave-valor estructurado para probar regex RE2 (`job_id=\d+ status=ERROR`) |
 | `logs/db/postgres.log` | Texto plano con errores de BD y `statement timeout` |
 | `logs/db/redis.log` | Archivo limpio **sin matches**, para probar exit code `1` y exclusión en `-c` y `-l` |
-| `logs/archive/old_logs.log.gz` | Archivo comprimido `.gz` real, para verificar que se saltea según BR-d |
+| `logs/archive/old_logs.log.gz` | Archivo comprimido `.gz` real, para verificar que se saltea como no-texto (BR-7) |
 | `data/users.csv` | Archivo tabular CSV con matches en campos específicos |
 | `data/config.json` | Archivo JSON multilínea con claves de configuración (`timeout_seconds`) |
-| `data/windows_crlf.txt` | Texto con saltos de línea Windows (`\r\n`) para verificar recorte de `\r` (FR-a) |
+| `data/windows_crlf.txt` | Texto con saltos de línea Windows (`\r\n`) para verificar recorte de `\r` (FR-9a) |
 | `data/subdata/deep_nested.txt` | Archivo anidado en subdirectorio profundo para probar búsqueda recursiva |
 | `data/acentos.log` | Única línea `ÑANDÚ ÁRBOL`, para probar `-i` con letras no ASCII (FR-7) |
+| `data/sin_salto_final.txt` | Dos líneas; la última no termina en `\n` (el archivo no termina en `0a`), para probar que se busca igual (FR-9b). No contiene `timeout` |
 | `edge-cases/empty.txt` | Archivo de 0 bytes (no debe romper el procesamiento ni conteos) |
-| `edge-cases/binary_nullbyte.bin` | Archivo binario con bytes nulos (`0x00`) para verificar sniffing de BR-d |
+| `edge-cases/binary_nullbyte.bin` | Archivo binario con bytes nulos (`0x00`) para verificar el sniffing (BR-6) |
 | `edge-cases/sample_image.png` | Archivo PNG binario real para verificar omisión con aviso |
-| `edge-cases/non_utf8_latin1.txt` | Archivo con caracteres ISO-8859-1 (no UTF-8), se clasifica como binario/no-texto según BR-d |
+| `edge-cases/non_utf8_latin1.txt` | Archivo con caracteres ISO-8859-1 (no UTF-8), se clasifica como no-texto (BR-6) |
 | `edge-cases/small_under_512.txt` | Archivo de texto chico (< 512 bytes) para probar sniffing sin desborde |
-| `edge-cases/long_line_exceeds_1mb.log` | Archivo con una línea de > 1 MB para probar BR-e (truncamiento y buffer acotado) |
+| `edge-cases/long_line_exceeds_1mb.log` | Archivo con una línea de > 1 MB para probar BR-8 (truncamiento y buffer acotado) |
 | `sniffing/utf8_split_at_512.txt` | Un carácter UTF-8 cruza el byte 512 de la muestra |
 | `sniffing/truncated_utf8_under_512.txt` | Secuencia UTF-8 incompleta al final de un objeto chico |
 | `sniffing/invalid_after_512.txt` | Byte inválido después de la muestra; debe imprimirse tal cual |
