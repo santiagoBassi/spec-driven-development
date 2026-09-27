@@ -1,7 +1,7 @@
 # gcsgrep — plan de iteraciones
 
 > Salida del paso **Planificar**, a partir de [`gcsgrep-spec.md`](./gcsgrep-spec.md)
-> (revisada, 65 requisitos, 65 VCs, 0 huérfanos).
+> (revisada, 67 requisitos, 67 VCs, 0 huérfanos).
 >
 > Cada iteración es un contrato chico y verificable: termina con código andando y
 > sus VCs pasando, **más todos los VCs de las iteraciones anteriores**. La siguiente
@@ -27,10 +27,10 @@ las siguientes, a medida que hacen falta cosas que GCS real no deja observar
 |---|---|---|---|
 | 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-8, FR-9a, FR-9b, FR-12, FR-14, FR-15a, FR-15b, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 18 |
 | 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17a, FR-17b, FR-18a, FR-18b, FR-19, FR-20a a FR-20c, BR-5 a BR-7 | 18 (14 propios + VC-12, 15a, 41, 42) |
-| 3 | Errores de GCS y fallos de red | FR-13a, FR-13b, FR-16a, FR-16b, FR-29a, FR-29b, FR-30a, FR-30b, FR-31, FR-32, FR-33a, FR-33b, FR-34, NFR-3 | 14 |
-| 4 | Concurrencia, progreso y parser estricto | FR-24a, FR-24b, FR-25, FR-26a a FR-26d, FR-27, FR-28, FR-36 a FR-38 | 12 |
+| 3 | Errores de GCS y fallos de red | FR-13a, FR-13b, FR-16a, FR-16b, FR-29a, FR-29b, FR-29c, FR-30a, FR-30b, FR-31, FR-32, FR-33a, FR-33b, FR-34, NFR-3 | 15 |
+| 4 | Concurrencia, progreso y parser estricto | FR-17c, FR-24a, FR-24b, FR-25, FR-26a a FR-26d, FR-27, FR-28, FR-36 a FR-38 | 13 |
 | 5 | NFRs y contrato de scripting | BR-9, NFR-1, NFR-2 | 3 |
-| | | | **65** |
+| | | | **67** |
 
 ---
 
@@ -250,8 +250,7 @@ que la Iteración 1 dejó con evidencia parcial.
 - [ ] VC-2 pasa — sin matches en todo `$B` → `1`, exactamente 6 avisos
 - [ ] VC-10 pasa — `-l` sobre todo el bucket, 9 objetos
 - [ ] VC-11 pasa — `-l` bajo `data/`, nada de afuera
-- [ ] VC-17a pasa — marcadores de carpeta: no se leen, no se informan, no cuentan
-  en el progreso
+- [ ] VC-17a pasa — marcadores de carpeta: no se leen, no se informan
 - [ ] VC-17b pasa — los marcadores cuentan para `--max`
 - [ ] VC-18a pasa — `-c` con un conteo por objeto, incluidos los `0`
 - [ ] VC-18b pasa — `-c` con todos los conteos en `0` → `1`
@@ -301,7 +300,9 @@ resultado completo.
   FR-13b para objeto puntual (falte el objeto o el bucket), FR-16a y FR-16b para bucket
   o prefijo. No se distingue cuál falta.
 - Error de lectura de un objeto: aviso, se sigue con el resto, exit `2`. Si la lectura
-  se corta a mitad, lo ya impreso queda y la línea incompleta no se busca.
+  se corta a mitad, lo ya impreso queda y la línea incompleta no se busca. Si se corta
+  antes de completar la muestra de 512 bytes del sniffing, no se imprime nada del
+  objeto.
 - Error de listado o de metadata: aborta sin leer.
 - Timeout por inactividad de 30 s en listado, metadata y lectura, contado desde el
   último byte recibido.
@@ -315,8 +316,10 @@ resultado completo.
 - [ ] VC-16a pasa — `not found` para un bucket inexistente
 - [ ] VC-16b pasa — `not found` para un prefijo de un bucket inexistente
 - [ ] VC-29a pasa — un objeto que falla no frena al resto, exit `2`
-- [ ] VC-29b pasa — un corte a mitad de lectura deja lo ya impreso y descarta la línea
-  incompleta
+- [ ] VC-29b pasa — un corte a mitad de lectura, con la muestra ya completa, deja lo ya
+  impreso y descarta la línea incompleta
+- [ ] VC-29c pasa — un corte antes de completar la muestra de 512 bytes: no se imprime
+  nada del objeto y se informa como fallido, no como no-texto
 - [ ] VC-30a pasa — `list error` aborta sin leer
 - [ ] VC-30b pasa — `metadata error` aborta sin leer
 - [ ] VC-31 pasa — exactamente un request al recurso que falla
@@ -347,6 +350,13 @@ resultado completo.
 - **Lo ya impreso no se retira (FR-29b).** El lector de líneas (Iteración 1) devuelve el
   error de lectura sin buscar la línea incompleta. Lo nuevo es el corte en el servidor de
   prueba, que anuncia un `Content-Length` y cierra antes.
+- **Un corte durante la muestra no imprime nada (FR-29c).** El sniffing (Iteración 2)
+  va entre el stream y el lector de líneas: hasta completar la muestra no se entregó
+  ninguna línea, así que un error de lectura en ese tramo se propaga como fallo del
+  objeto y no como no-texto. Ojo: un objeto de menos de 512 bytes y un cuerpo cortado
+  pueden dar el mismo resultado al llenar el búfer de la muestra (por ejemplo, con
+  `io.ReadFull`, ambos devuelven `io.ErrUnexpectedEOF`). Hay que distinguir el fin
+  limpio del cuerpo de un corte, y VC-29c lo ejercita con un cuerpo de 22 bytes.
 - **VC-32, VC-33a, VC-33b y VC-34 tardan entre 30 y 60 s cada uno.** Corren en paralelo con
   `t.Parallel()` para que el gate no pase de unos pocos minutos.
 
@@ -362,7 +372,7 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 - `--concurrency <N>` (1 a 32, default 4); el pool pasa de 1 a N workers.
 - Salida entrelazada entre objetos, con líneas enteras y orden dentro de cada objeto.
 - Progreso `X/total objects processed` solo si stderr es una TTY, borrado antes de
-  cada aviso y al final.
+  cada aviso y al final. El total no incluye los marcadores de carpeta (FR-17c).
 - Muerte silenciosa por `SIGPIPE` cuando se cierra stdout, sin arrancar más lecturas.
 - Parser estricto: flags combinados o con `=`, flags repetidos, un solo error de uso
   reportado.
@@ -370,6 +380,7 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 
 **Criterios de éxito**
 
+- [ ] VC-17c pasa — los marcadores de carpeta no cuentan en el total del progreso
 - [ ] VC-24a pasa — `-in`, `-ic`, `-Ei` → `2`, cumple el chequeo P
 - [ ] VC-24b pasa — `--max=5`, `--concurrency=8` → `2`, cumple el chequeo P
 - [ ] VC-25 pasa — flag repetido → `2`, cumple el chequeo P
@@ -387,8 +398,8 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 
 **Nota de regresión:** el default cambia de 1 a 4 workers. Los VCs de salida ya
 comparan líneas sin importar el orden entre objetos (convención de la spec), pero
-recién ahora eso se ejercita de verdad. VC-19 (corte de `-l`), VC-29a, VC-29b y VC-32
-(fallo de un objeto con otros en paralelo) son los más sensibles.
+recién ahora eso se ejercita de verdad. VC-19 (corte de `-l`), VC-29a, VC-29b, VC-29c
+y VC-32 (fallo de un objeto con otros en paralelo) son los más sensibles.
 
 **Nota de plataforma:** VC-37 exige Linux. En la laptop (macOS) se corre dentro de
 un contenedor `golang` con `util-linux`. El resto de la suite es portable.
@@ -417,7 +428,7 @@ umbral para que pase.
   ni `.go:` en todos los casos de falla
 - [ ] VC-48 pasa — mediana < 180 s con 1000 objetos de `$P` y ≥ 50 Mbps medidos
 - [ ] VC-49 pasa — pico ≤ 100 MiB con 1 GB y ≤ 20 MiB más que con 10 MB
-- [ ] **Los 65 VCs pasan en una misma corrida**, y `gcsgrep-cobertura-vc.md`
+- [ ] **Los 67 VCs pasan en una misma corrida**, y `gcsgrep-cobertura-vc.md`
   queda completo
 
 **Si VC-48 no pasa:** el umbral ya contempla la peor latencia medida a `us-east1`

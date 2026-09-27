@@ -416,15 +416,12 @@ existe (FR-15b), que sale con código `1`.
 de carpeta" que crea, por ejemplo, la consola de GCS),
 **Cuando** la herramienta procesa la ubicación,
 **Entonces** esos objetos no se leen, no aparecen en stdout (tampoco como conteo `0`
-con `-c`), no generan aviso y no cuentan en el total del progreso (FR-37).
+con `-c`) y no generan aviso.
 
 > **VC-17a** — Servidor de prueba con `fake/dir/` (0 bytes) y `fake/dir/a.log`
 > (`timeout a`). `./gcsgrep -c timeout gs://fake/ 2>err.txt` sale con código `0`,
 > su stdout es exactamente `gs://fake/dir/a.log:1`, `err.txt` tiene 0 bytes, y el
 > servidor no registra ninguna lectura de contenido de `dir/`.
-> Con el mismo servidor, `script -q -c "./gcsgrep -c timeout gs://fake/" out.txt`
-> captura el progreso en una pseudo-terminal: `out.txt` contiene
-> `1/1 objects processed` y no contiene ningún progreso cuyo total sea `2`.
 
 #### FR-17b · Contar los marcadores de carpeta para el tope
 
@@ -437,6 +434,18 @@ como objetos.
 > **VC-17b** — Con el servidor de VC-17a (`fake/dir/` y `fake/dir/a.log`),
 > `./gcsgrep --max 1 timeout gs://fake/` sale con código `2`, stdout vacío, y stderr es
 > exactamente el mensaje de BR-3 para `1` y `gs://fake/`.
+
+#### FR-17c · No contar los marcadores de carpeta en el progreso
+
+**Dado** un listado que incluye marcadores de carpeta y que stderr es una TTY,
+**Cuando** la herramienta muestra el progreso (FR-37),
+**Entonces** el `<total>` cuenta solo los objetos que se procesan y no cuenta los
+marcadores.
+
+> **VC-17c** — Con el servidor de VC-17a (`fake/dir/` y `fake/dir/a.log`),
+> `script -q -c "./gcsgrep -c timeout gs://fake/" out.txt` captura el progreso en una
+> pseudo-terminal: `out.txt` contiene `1/1 objects processed` y no contiene ningún
+> progreso cuyo total sea `2`.
 
 ### Formatos de salida
 
@@ -705,20 +714,41 @@ sale con código `2` aunque haya habido matches.
 
 #### FR-29b · Conservar lo ya impreso de un objeto cuya lectura se corta
 
-**Dado** un objeto cuya lectura se corta después de haber entregado líneas completas
-que matchean,
+**Dado** un objeto cuya lectura se corta después de haberse completado la muestra de
+clasificación de BR-6 y de haber entregado líneas completas que matchean,
 **Cuando** la herramienta detecta el corte,
 **Entonces** las líneas de ese objeto que ya imprimió quedan en stdout, la línea que
 estaba leyendo al cortarse no se busca ni se imprime (aunque lo recibido contenga el
 patrón), y el objeto se informa como fallido según FR-29a.
 
 > **VC-29b** — Servidor de prueba con `fake/a.log` (`timeout a`), `fake/b.log` y
-> `fake/c.log` (`timeout c`). La respuesta de `b.log` anuncia el cuerpo
-> `timeout b1\ntimeout b2\n` (22 bytes), pero el servidor cierra la conexión después de
-> enviar los primeros 18, `timeout b1\ntimeout`. `./gcsgrep timeout gs://fake/` sale con
+> `fake/c.log` (`timeout c`). La respuesta de `b.log` anuncia un cuerpo de 1002 bytes: la
+> línea `timeout b1\n` (11 bytes), 98 líneas de relleno `aaaaaaaaa\n` (10 bytes cada una)
+> y la línea `timeout b2\n` (11 bytes). El servidor cierra la conexión después de enviar
+> los primeros 998 bytes, que terminan en `timeout` (sin ` b2\n`); la muestra de 512
+> bytes ya se recibió completa. `./gcsgrep timeout gs://fake/` sale con
 > código `2`, su stdout es exactamente `gs://fake/a.log:timeout a`,
 > `gs://fake/b.log:timeout b1` y `gs://fake/c.log:timeout c`, y stderr contiene una línea
 > que empieza con `gcsgrep: gs://fake/b.log: read error: `.
+
+#### FR-29c · No imprimir nada de un objeto cuya lectura se corta antes de clasificarlo
+
+**Dado** un objeto cuya lectura se corta antes de que se complete la muestra de BR-6
+(antes de recibir sus primeros 512 bytes, o su fin si mide menos),
+**Cuando** la herramienta detecta el corte,
+**Entonces** no puede clasificarlo: no busca ni imprime nada de lo recibido (aunque
+contenga el patrón), no lo saltea como no-texto, y lo informa como fallido según FR-29a.
+
+> **VC-29c** — Servidor de prueba con `fake/a.log` (`timeout a`), `fake/b.log` y
+> `fake/c.log` (`timeout c`). La respuesta de `b.log` anuncia el cuerpo
+> `timeout b1\ntimeout b2\n` (22 bytes), pero el servidor cierra la conexión después de
+> enviar los primeros 18, `timeout b1\ntimeout`: el objeto entero cabe en la muestra.
+> `./gcsgrep timeout gs://fake/` sale con código `2`, su stdout es exactamente
+> `gs://fake/a.log:timeout a` y `gs://fake/c.log:timeout c`, y stderr contiene una línea
+> que empieza con `gcsgrep: gs://fake/b.log: read error: ` y ninguna línea
+> `not a text file, skipped`. El resultado es el mismo si `b.log` anuncia 1001 bytes
+> (`timeout b1\n` y 99 líneas de relleno `aaaaaaaaa\n`) y el servidor corta después de
+> los primeros 100.
 
 #### FR-30a · Abortar si falla el listado
 
@@ -1051,7 +1081,7 @@ progreso (FR-37) también va a stderr.
 > VC-16a, VC-16b, VC-17b, VC-20a, VC-20b, VC-20c, VC-22, VC-23, VC-24a, VC-24b, VC-25,
 > VC-26c, VC-26d, VC-27, VC-30a, VC-30b, VC-33a, VC-33b, VC-35, VC-40, VC-41 y VC-42),
 > stdout está vacío, la primera línea de stderr empieza con `gcsgrep: `, y stderr no
-> contiene `panic:`, `goroutine ` ni `.go:`. En VC-29a, VC-29b y VC-32, stderr cumple la
+> contiene `panic:`, `goroutine ` ni `.go:`. En VC-29a, VC-29b, VC-29c y VC-32, stderr cumple la
 > misma condición.
 
 ---
@@ -1142,6 +1172,7 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | FR-16b | Pregunta 8 + hallazgo de la Iteración 1 | VC-16b | falla |
 | FR-17a | FR-b + gate de revisión | VC-17a | borde (marcador de carpeta) |
 | FR-17b | BR-c + gate de revisión | VC-17b | borde (tope) |
+| FR-17c | FR-g + FR-b | VC-17c | borde (marcador de carpeta, progreso) |
 | FR-18a | Pregunta 4 | VC-18a | feliz |
 | FR-18b | Pregunta 4 + Pregunta 8 | VC-18b | borde (todo 0) |
 | FR-19 | Pregunta 4 | VC-19 | feliz |
@@ -1162,6 +1193,7 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | FR-28 | Pregunta 9 | VC-28 | invariante |
 | FR-29a | FR-f | VC-29a | falla parcial |
 | FR-29b | FR-f | VC-29b | falla parcial (corte a mitad) |
+| FR-29c | FR-f + BR-d | VC-29c | falla parcial (corte antes de clasificar) |
 | FR-30a | NFR-c | VC-30a | falla |
 | FR-30b | NFR-c | VC-30b | falla |
 | FR-31 | NFR-c | VC-31 | invariante |
@@ -1186,7 +1218,7 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | NFR-2 | NFR-b | VC-49 | medición |
 | NFR-3 | NFR-c | VC-50 | medición |
 
-**65 requerimientos (53 FR, 9 BR, 3 NFR), 65 VCs, 0 huérfanos.**
+**67 requerimientos (55 FR, 9 BR, 3 NFR), 67 VCs, 0 huérfanos.**
 
 ## Preguntas abiertas
 

@@ -299,6 +299,12 @@ Si la lectura de un objeto se corta a mitad, las líneas que ya se imprimieron q
 y el objeto se informa como fallido. Retirar lo impreso obligaría a bufferear cada
 objeto entero, y el exit 2 ya le avisa al script que el resultado está incompleto.
 
+Si el corte llega antes de completar la muestra de 512 bytes con la que se clasifica
+el objeto (ver "Binarios y `.gz`"), todavía no se sabe si es texto: no se imprime nada
+de ese objeto y se informa como fallido, no como no-texto. Imprimir contenido sin
+haberlo clasificado rompe la razón de saltear los binarios. En un objeto de menos de
+512 bytes la muestra es el objeto entero, así que un corte a esa altura cae en este caso.
+
 | Opción | Por qué no |
 |---|---|
 | Reintentos con backoff | Son difíciles de verificar, pueden duplicar el costo de lectura, y un reintento a mitad de un objeto puede repetir líneas ya impresas. Diferido. |
