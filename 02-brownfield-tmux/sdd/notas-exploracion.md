@@ -59,6 +59,14 @@ externo; no cumpliría el pedido. Además, `spawn_pane` es compartido por
 `cmd-respawn-pane.c:83`; `cmd-display-menu.c:388`). Cualquier bifurcación
 para SSH debe distinguirla de los panes normales.
 
+Tampoco alcanza con pasar host y opciones SSH como `sc.argv`: `spawn_pane`
+interpreta esos argumentos como comando local, aplica `default-command` si no
+hay argumentos en un pane nuevo y los registra en logs
+(`spawn.c:379-390,436-445,546-575`).
+La futura interfaz necesita distinguir los datos de conexión del comando que
+tmux ejecuta normalmente; también debe decidir qué datos pueden aparecer en
+esos logs.
+
 ### 3. El PTY ya une teclado, salida y event loop
 
 El pane guarda `pid`, `fd`, `event` y estado del parser (`tmux.h:1361-1390`).
@@ -107,11 +115,18 @@ elige `osdep-@PLATFORM@.c` y muestra otros casos de fuentes condicionales.
 El patrón de detección y enlace de una biblioteca está en
 `configure.ac:250-303` (libevent).
 
+`IS_LINUX` sirve para condicionar reglas de Automake; no es por sí sola una
+macro disponible en C. `cmd.c` tiene las declaraciones `extern` de las
+entradas en `cmd.c:30-121` y la tabla en `cmd.c:123-216`. Si el comando SSH
+solo se enlaza en Linux, ambas referencias necesitan una guarda C definida
+desde `configure`, además de condicionar la fuente y la biblioteca en el
+build. `configure.ac:522-527` y `Makefile.am:242-245` muestran un patrón que
+combina `AC_DEFINE` y `AM_CONDITIONAL`.
+
 No se encontraron `libssh`, `ssh_session` ni `ssh_channel` en `Makefile.am`,
 `configure.ac`, `tmux.h`, `spawn.c` o `cmd.c` (búsqueda literal). Por tanto,
-la biblioteca y sus guards serían nuevos. Habría que condicionar **la fuente,
-el enlace y el registro del comando**; condicionar solo el archivo de SSH
-dejaría referencias al comando desde `cmd.c:123-215` en otros sistemas.
+la biblioteca y sus guards serían nuevos. En builds no Linux no deberían
+quedar dependencias de enlace ni referencias al símbolo del comando.
 
 `compat/` aporta reemplazos de funciones del sistema: por ejemplo,
 `compat/fdforkpty.c:23-33` y su detección en `configure.ac:828-839`.
@@ -130,8 +145,16 @@ el PTY local y el canal remoto. Para el servidor, el pane conservaría su
 
 Es una hipótesis, no una solución comprobada. Faltaría definir autenticación,
 verificación del host, conexión, PTY remoto, propagación de resize, señales,
-errores y cierre. Alojar SSH en el servidor es otra posibilidad, con cambios
-más profundos en las rutas de E/S y salida descritas en los hallazgos 3 y 4.
+errores y cierre. Si el hijo funciona como puente de bytes, también tendría
+que evitar que el modo de línea del PTY local altere la entrada y transportar
+datos en ambos sentidos sin bloquear la interacción. El servidor vuelve de
+`spawn_pane` tras el `fork` (`spawn.c:492-501,577-613`), y el ejecutor del
+comando continúa con selección, hook y retorno (`cmd-split-window.c:288-332`):
+un fallo posterior de conexión o autenticación no sería automáticamente un
+error síncrono del comando. La spec debe definir cómo se informa y qué ocurre
+con el pane en ese caso. Alojar SSH en el servidor es otra posibilidad, con
+cambios más profundos en las rutas de E/S y salida descritas en los hallazgos
+3 y 4.
 
 ## Módulos a tener presentes en la spec
 
@@ -171,6 +194,8 @@ más profundos en las rutas de E/S y salida descritas en los hallazgos 3 y 4.
 5. Qué ocurre al desconectar, matar o respawnear el pane, y con
    `remain-on-exit` o la espera `-W` (`cmd-respawn-pane.c:33-99`;
    `cmd-split-window.c:323-330`; `server-fn.c:220-235,354-435`).
+6. Cómo se separan destino/opciones SSH de `shell-command`, qué se registra en
+   logs y qué ve el usuario ante un fallo de conexión posterior al `fork`.
 
 ## Estado de la línea de base
 
@@ -179,9 +204,10 @@ ejecutaron tests**. El checkout no tiene `configure` generado ni binario
 `tmux`. Para construir desde Git, `README:32-39` indica `sh autogen.sh`,
 `./configure` y `make`.
 
-Antes de cambiar C, la futura spec debería registrar el resultado de los
-tests relevantes: `regress/pane-ops.sh:3-25`,
-`regress/new-window-command.sh`, `regress/new-session-command.sh`,
+Antes de cerrar la spec, falta medir una línea de base de build y regresión
+para poder comparar el cambio futuro. Los tests relevantes incluyen
+`regress/pane-ops.sh:3-25`, `regress/new-window-command.sh`,
+`regress/new-session-command.sh`,
 `regress/respawn-pane-control-lag.sh:3-12` y
 `regress/kill-session-process-exit.sh:3-20`. El runner está en
-`regress/Makefile:1-38`. Sus resultados siguen **sin medir**.
+`regress/Makefile:1-44`. Tanto el build como esos tests siguen **sin medir**.
