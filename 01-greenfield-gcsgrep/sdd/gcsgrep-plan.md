@@ -1,7 +1,7 @@
 # gcsgrep — plan de iteraciones
 
 > Salida del paso **Planificar**, a partir de [`gcsgrep-spec.md`](./gcsgrep-spec.md)
-> (revisada, 67 requisitos, 67 VCs, 0 huérfanos).
+> (67 requisitos, 67 VCs, 0 huérfanos).
 >
 > Cada iteración es un contrato chico y verificable: termina con código andando y
 > sus VCs pasando, **más todos los VCs de las iteraciones anteriores**. La siguiente
@@ -25,8 +25,8 @@ las siguientes, a medida que hacen falta cosas que GCS real no deja observar
 
 | Iteración | Entrega | Implementa | VCs que cierra |
 |---|---|---|---|
-| 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-8, FR-9a, FR-9b, FR-12, FR-14, FR-15a, FR-15b, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 18 |
-| 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17a, FR-17b, FR-18a, FR-18b, FR-19, FR-20a a FR-20c, BR-5 a BR-7 | 18 (14 propios + VC-12, 15a, 41, 42) |
+| 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-8, FR-9a, FR-9b, FR-12, FR-14, FR-15a, FR-15b, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 17 |
+| 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17a, FR-17b, FR-18a, FR-18b, FR-19, FR-20a a FR-20c, BR-5 a BR-7 | 19 (14 propios + VC-7, 12, 15a, 41, 42) |
 | 3 | Errores de GCS y fallos de red | FR-13a, FR-13b, FR-16a, FR-16b, FR-29a, FR-29b, FR-29c, FR-30a, FR-30b, FR-31, FR-32, FR-33a, FR-33b, FR-34, NFR-3 | 15 |
 | 4 | Concurrencia, progreso y parser estricto | FR-17c, FR-24a, FR-24b, FR-25, FR-26a a FR-26d, FR-27, FR-28, FR-36 a FR-38 | 13 |
 | 5 | NFRs y contrato de scripting | BR-9, NFR-1, NFR-2 | 3 |
@@ -42,7 +42,7 @@ Todo corre sobre una cuenta con el *Always Free* de Cloud Storage: 5 GB-mes en
 
 | Recurso | Qué es | Se prepara en |
 |---|---|---|
-| `$B` = `gs://sdd-fardenghi-itba` | Bucket de fixtures, `us-east1`, Standard, *public access prevention* activado. Tiene los 24 fixtures, con la metadata de `sniffing/` correcta | Existe; se completó con `data/acentos.log` y `data/sin_salto_final.txt` |
+| `$B` = `gs://sdd-fardenghi-itba` | Bucket de fixtures, `us-east1`, Standard, *public access prevention* activado. Debe tener los 24 fixtures, con la metadata de `sniffing/` correcta | Iteración 1: subir `data/acentos.log` y `data/sin_salto_final.txt` si faltan |
 | `lectora` | Service account con solo `roles/storage.objectViewer` sobre `$B` | Iteración 1 |
 | `sin-acceso` | Service account sin ningún rol sobre `$B` | Iteración 1 |
 | Listener de conexiones | `nc -lk 127.0.0.1 <puerto>`, para el chequeo P y VC-35 | Iteración 1 |
@@ -132,7 +132,8 @@ nada, sin ampliar su acceso y sin poder escanear un bucket enorme por error.
 - Lectura por streaming, **secuencial** (un objeto por vez), con recorte de `\r`;
   se busca en cada línea completa y se retiene solo su primer MiB para imprimir.
 - Acceso denegado (`403`) en listado o metadata → `gcsgrep: access denied: <ubicación>`.
-- Entorno: subir `data/acentos.log` a `$B`, crear `lectora` y `sin-acceso`.
+- Entorno: subir `data/acentos.log` y `data/sin_salto_final.txt` a `$B` si faltan, crear
+  `lectora` y `sin-acceso`.
 
 **Fuera de alcance de esta iteración:** servidor de prueba, sniffing de binarios (los
 objetos no-texto se leen como bytes), `-c`, `-l`, marcadores de carpeta, el mensaje
@@ -146,7 +147,6 @@ progreso, flags combinados o repetidos.
 - [ ] VC-4 pasa — regex RE2 con `-E`
 - [ ] VC-5 pasa — regex inválida → `2`, cumple el chequeo P
 - [ ] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
-- [ ] VC-7 pasa — `-i`, también con `Ñ`/`Á` y `LANG=C`
 - [ ] VC-8 pasa — `-n` numera desde `1`
 - [ ] VC-9a pasa — recorte de `\r` en líneas `\r\n`
 - [ ] VC-9b pasa — la última línea sin `\n` se busca y sale terminada en `\n`
@@ -168,6 +168,7 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
 
 | VC | Evidencia parcial que se busca en la Iteración 1 | Lo que falta observar |
 |---|---|---|
+| VC-7 (FR-7) | `-i timeout` sobre `api.log` → 4 líneas (2 sin `-i`), y `LANG=C -i 'ñandú árbol'` sobre `acentos.log` → `0` (`1` sin `-i`) | Que `ß` no matchee con `SS` (`fake/eszett.log`) |
 | VC-12 (FR-12) | `./gcsgrep timeout gs://$B/logs/app/api.log` → `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` |
 | VC-15a (FR-15a) | Un bucket vacío se trata igual que un prefijo sin objetos, y VC-15b pasa | Bucket existente sin objetos (`empty`) |
 | VC-41 (BR-3) | `--max 5` sobre `edge-cases/` aborta con el mensaje exacto; `--max 6` → `0` | Tope por defecto de 1000 y que no se pida la página siguiente |
@@ -261,6 +262,7 @@ que la Iteración 1 dejó con evidencia parcial.
 - [ ] VC-43 pasa — no-texto salteado sin contar como fallo
 - [ ] VC-44 pasa — bordes de la muestra de 512 bytes
 - [ ] VC-45 pasa — gzip salteado por contenido; `transcoded.log` se busca como texto
+- [ ] VC-7 pasa — `-i` sin plegado de `ß` a `SS` *(implementado en la 1)*
 - [ ] VC-12 pasa — objeto puntual sin request de listado *(implementado en la 1)*
 - [ ] VC-15a pasa — el bucket `empty` → `1` *(implementado en la 1)*
 - [ ] VC-41 pasa — tope de 1000 sin paginar de más *(implementado en la 1)*
@@ -268,24 +270,21 @@ que la Iteración 1 dejó con evidencia parcial.
   → `0`, y `--max` sin valor → `2`, cumple el chequeo P *(implementado en la 1)*
 - [ ] **VC-3 sigue pasando**, ahora con los no-texto salteados
 
-**A resolver primero: transcoding (VC-45).** Medición previa, hecha con una implementación
-anterior que se descartó (hay que repetirla con la nueva):
+**A resolver primero: transcoding (VC-45).** BR-7 exige que la lectura no pida
+`Accept-Encoding: gzip`, para que sea GCS quien decida si descomprime. El riesgo es que
+el cliente de Go lo pida igual: la librería no lo pone (solo lo hace con
+`ReadCompressed`), pero el transporte HTTP de Go lo agrega por su cuenta y además
+descomprime la respuesta. Si pasa:
 
-- `sniffing/transcoded.log` (con `Content-Encoding: gzip` y `Cache-Control: no-cache`)
-  **llegó como texto** con el cliente de Go, así que el riesgo original ("llega
-  comprimido") no se dio.
-- Pero el request **sí envía** `Accept-Encoding: gzip`, en metadata y en lectura. La
-  librería no lo pide (solo lo pone con `ReadCompressed`): lo agrega el transporte HTTP
-  de Go, que además descomprime por su cuenta. BR-7 exige que la lectura no lo pida.
 - VC-45 pasaría igual, porque no observa el header, pero no se cumpliría la letra de
-  BR-7. Por cómo funciona el transporte, un objeto con `Content-Encoding: gzip` y
-  `Cache-Control: no-transform` también se buscaría como texto, y BR-7 dice que no
-  (ningún fixture lo cubre).
+  BR-7.
+- Un objeto con `Content-Encoding: gzip` y `Cache-Control: no-transform` también se
+  buscaría como texto, y BR-7 dice que no (ningún fixture lo cubre).
 
 La corrección es de configuración del cliente: que no pida gzip, para que sea GCS
 quien decida si descomprime. Se verifica con el servidor de prueba, que registra los
-headers de cada request, y con VC-45 contra `$B`, que tiene que seguir pasando. Si no
-se puede lograr, cambia el *qué*: se vuelve a la spec, no se ajusta el VC.
+headers de cada request, y con VC-45 contra `$B`, que tiene que pasar. Si no se puede
+lograr, cambia el *qué*: se vuelve a la spec, no se ajusta el VC.
 
 ---
 
@@ -339,11 +338,11 @@ resultado completo.
   bucket: no hay que consultar el bucket (`lectora` no tiene `storage.buckets.get`) ni
   leer el cuerpo del `404`, que el cliente de Go descarta. Alcanza con mapear los
   errores que ya distingue: `ErrObjectNotExist` en la consulta del objeto puntual y
-  `ErrBucketNotExist` en el listado, ambos a `not found: <ubicación>`. Medido contra
-  GCS real con una implementación anterior que se descartó: bucket inexistente en el
-  listado → `bucket doesn't exist`; objeto inexistente, o bucket inexistente con
-  ubicación de objeto → `object doesn't exist`. No se hace ningún request extra, así
-  que FR-12 no se toca.
+  `ErrBucketNotExist` en el listado, ambos a `not found: <ubicación>`. A confirmar
+  contra GCS real en esta iteración: bucket inexistente en el listado →
+  `ErrBucketNotExist`; objeto inexistente, o bucket inexistente con ubicación de
+  objeto → `ErrObjectNotExist`. No se hace ningún request extra, así que FR-12 no se
+  toca.
   Un prefijo sin objetos en un bucket que existe sigue siendo `1` (FR-15b). Un `404` en la
   lectura de un objeto ya listado (borrado entre el listado y la lectura) es un fallo de
   lectura, FR-29a, y no `not found`.
@@ -467,19 +466,12 @@ por una revisión de spec, no por el plan.
 
 - **Se actualiza el plan** si cambia el *cómo* o el orden: una pieza compartida que
   conviene adelantar, un VC que resulta depender de algo de otra iteración.
-- **Se vuelve a la spec** si cambia el *qué*. Los dos candidatos que se identificaron al
-  planificar:
-  - La distinción bucket/objeto inexistente **sí cambió el qué**: FR-13a, FR-13b, FR-16a
-    y FR-16b informan un mismo mensaje, `not found`.
-  - El transcoding **no cambia el qué**: es de configuración del cliente (Iteración 2).
-
-  Además, qué pasa con un flag que exige valor y llega sin él quedó fijado en la spec
-  (BR-4 y FR-26d).
+- **Se vuelve a la spec** si cambia el *qué*: un comportamiento observable, un mensaje o
+  un umbral.
 - **No se reescribe** el registro de una iteración terminada. Lo aprendido va a
   `CONTEXT.md`, `DECISIONS.md` y a las iteraciones futuras de este plan.
 
 ## Qué sigue
 
-La implementación anterior se descartó: la cátedra pidió corregir la spec y volver a
-implementar. Primero se corrige la spec y se revisa de nuevo; después se construye desde la
-**Iteración 1**, en orden, y la evidencia de cada VC va a `gcsgrep-cobertura-vc.md`.
+Se construye desde la **Iteración 1**, en orden, y la evidencia de cada VC va a
+`gcsgrep-cobertura-vc.md`.

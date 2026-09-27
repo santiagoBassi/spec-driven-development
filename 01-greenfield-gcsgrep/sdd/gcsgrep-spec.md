@@ -1,20 +1,6 @@
 # gcsgrep — spec
 
-> **Estado: revisada.** Pasó el gate de revisión sin preguntas abiertas. Revisada de nuevo
-> tras ajustar el entorno de verificación a un único bucket de fixtures, un bucket de
-> performance y ningún bucket sin acceso, y el umbral de NFR-1 a la región del bucket.
-> Ningún FR ni BR cambió.
->
-> **Revisada otra vez tras cerrar la Iteración 1**, con dos cambios que salen de
-> implementarla:
-> - FR-13a, FR-13b, FR-16a y FR-16b informan un recurso inexistente con un mismo
->   mensaje, `gcsgrep: not found: <ubicación>`, y no distinguen si falta el objeto o el
->   bucket. Se reparten por tipo de ubicación: FR-13a y FR-13b para objeto puntual,
->   FR-16a y FR-16b para bucket o prefijo. Se quita la pista de la `/` final.
-> - BR-4 y FR-26d fijan qué pasa cuando `--max` o `--concurrency` llegan sin valor.
->
-> El entorno de verificación admite Linux o macOS (VC-37 sigue exigiendo Linux), como
-> ya decía el plan.
+> **Estado: pendiente de revisión.**
 >
 > Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md).
 >
@@ -244,7 +230,10 @@ matchean.
 > imprime 4 líneas (las que contienen `timeout`, `TIMEOUT` y `Timeout`). Sin `-i`, el
 > mismo comando imprime 2. `LANG=C ./gcsgrep -i 'ñandú árbol' gs://$B/data/acentos.log`
 > (cuya única línea es `ÑANDÚ ÁRBOL`) sale con código `0` e imprime esa línea; sin
-> `-i`, sale con código `1`.
+> `-i`, sale con código `1`. Contra el servidor de prueba, con `fake/eszett.log` cuya
+> única línea es `STRASSE`, `./gcsgrep -i strasse gs://fake/eszett.log` imprime
+> `gs://fake/eszett.log:STRASSE` y sale con código `0`, y
+> `./gcsgrep -i 'straße' gs://fake/eszett.log` sale con código `1` con stdout vacío.
 
 #### FR-8 · Numerar líneas con `-n`
 
@@ -1156,20 +1145,20 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | FR-4 | FR-a | VC-4 | feliz |
 | FR-5 | FR-a | VC-5 | falla |
 | FR-6 | Gate de revisión | VC-6 | falla |
-| FR-7 | FR-d | VC-7 | feliz |
+| FR-7 | FR-d | VC-7 | feliz + borde (`ß`/`SS`) |
 | FR-8 | FR-c | VC-8 | feliz |
 | FR-9a | FR-a | VC-9a | borde (`\r\n`) |
 | FR-9b | FR-a | VC-9b | borde (sin `\n` final) |
 | FR-10 | FR-b | VC-10 | feliz |
 | FR-11 | FR-b | VC-11 | feliz |
 | FR-12 | FR-b | VC-12 | feliz |
-| FR-13a | FR-b + hallazgo de la Iteración 1 | VC-13a | falla |
-| FR-13b | FR-b + hallazgo de la Iteración 1 | VC-13b | falla |
+| FR-13a | FR-b + Pregunta 8 | VC-13a | falla |
+| FR-13b | FR-b + Pregunta 8 | VC-13b | falla |
 | FR-14 | FR-b | VC-14 | falla |
 | FR-15a | Pregunta 8 | VC-15a | borde (bucket vacío) |
 | FR-15b | Pregunta 8 | VC-15b | borde (prefijo vacío) |
-| FR-16a | Pregunta 8 + hallazgo de la Iteración 1 | VC-16a | falla |
-| FR-16b | Pregunta 8 + hallazgo de la Iteración 1 | VC-16b | falla |
+| FR-16a | Pregunta 8 | VC-16a | falla |
+| FR-16b | Pregunta 8 | VC-16b | falla |
 | FR-17a | FR-b + gate de revisión | VC-17a | borde (marcador de carpeta) |
 | FR-17b | BR-c + gate de revisión | VC-17b | borde (tope) |
 | FR-17c | FR-g + FR-b | VC-17c | borde (marcador de carpeta, progreso) |
@@ -1188,7 +1177,7 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | FR-26a | Pregunta 9 | VC-26a | feliz |
 | FR-26b | Pregunta 9 | VC-26b | feliz + borde (límites) |
 | FR-26c | Pregunta 9 | VC-26c | falla |
-| FR-26d | Pregunta 9 + hallazgo de la Iteración 1 | VC-26d | falla (sin valor) |
+| FR-26d | Pregunta 9 | VC-26d | falla (sin valor) |
 | FR-27 | Gate de revisión | VC-27 | falla |
 | FR-28 | Pregunta 9 | VC-28 | invariante |
 | FR-29a | FR-f | VC-29a | falla parcial |
@@ -1208,7 +1197,7 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | BR-1 | BR-a | VC-39 | invariante |
 | BR-2 | BR-b | VC-40 | falla (acceso) |
 | BR-3 | BR-c | VC-41 | borde (límite) |
-| BR-4 | BR-c + hallazgo de la Iteración 1 | VC-42 | borde + falla |
+| BR-4 | BR-c | VC-42 | borde + falla |
 | BR-5 | BR-d | VC-43 | borde (mixto) |
 | BR-6 | BR-d | VC-44 | borde (muestra) |
 | BR-7 | BR-d | VC-45 | borde (gzip) |
