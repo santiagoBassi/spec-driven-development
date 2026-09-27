@@ -168,8 +168,6 @@ lo detecte sin parsear la salida.
 > `edge-cases/binary_nullbyte.bin`, `edge-cases/sample_image.png`,
 > `edge-cases/non_utf8_latin1.txt`, `logs/archive/old_logs.log.gz`,
 > `sniffing/truncated_utf8_under_512.txt` y `sniffing/gzip_no_extension`.
-> `./gcsgrep -l palabra_inexistente_xyz gs://$B/logs/db/` también sale con código `1` y
-> stdout de 0 bytes.
 
 #### FR-3 · Tratar el patrón como literal por defecto
 
@@ -216,22 +214,31 @@ stderr, sin operar contra GCS.
 > `./gcsgrep -- '' gs://$B/logs/` salen con código `2`, stdout vacío, y stderr es
 > exactamente `gcsgrep: empty pattern`. Cada caso cumple el chequeo P.
 
-#### FR-7 · Ignorar mayúsculas con `-i`
+#### FR-7a · Ignorar mayúsculas con `-i`
 
 **Dado** un objeto con el patrón escrito con distintas combinaciones de mayúsculas,
+incluidas letras no ASCII (`ñ`/`Ñ`, `á`/`Á`),
 **Cuando** la persona ejecuta la búsqueda con `-i`,
-**Entonces** el sistema matchea sin distinguir mayúsculas de minúsculas, también en
-letras no ASCII (`ñ`/`Ñ`, `á`/`Á`), con el mismo resultado en cualquier máquina: no
-depende del locale ni de variables como `LANG`. Se usa el case folding simple de
-Unicode de RE2 (`(?i)`), así que las equivalencias de más de un carácter (`ß`/`SS`) no
-matchean.
+**Entonces** el sistema matchea sin distinguir mayúsculas de minúsculas, con el mismo
+resultado en cualquier máquina: no depende del locale ni de variables como `LANG`. Usa
+el case folding simple de Unicode de RE2 (`(?i)`).
 
-> **VC-7** — `./gcsgrep -i timeout gs://$B/logs/app/api.log` sale con código `0` e
+> **VC-7a** — `./gcsgrep -i timeout gs://$B/logs/app/api.log` sale con código `0` e
 > imprime 4 líneas (las que contienen `timeout`, `TIMEOUT` y `Timeout`). Sin `-i`, el
 > mismo comando imprime 2. `LANG=C ./gcsgrep -i 'ñandú árbol' gs://$B/data/acentos.log`
 > (cuya única línea es `ÑANDÚ ÁRBOL`) sale con código `0` e imprime esa línea; sin
-> `-i`, sale con código `1`. Contra el servidor de prueba, con `fake/eszett.log` cuya
-> única línea es `STRASSE`, `./gcsgrep -i strasse gs://fake/eszett.log` imprime
+> `-i`, sale con código `1`.
+
+#### FR-7b · No plegar equivalencias de más de un carácter
+
+**Dado** un objeto cuyo texto usa una equivalencia de mayúscula/minúscula de más de un
+carácter (`ß`/`SS`),
+**Cuando** la persona busca con `-i` la forma que no está en el objeto,
+**Entonces** el sistema no matchea: el case folding simple de RE2 no cubre esa
+equivalencia.
+
+> **VC-7b** — Contra el servidor de prueba, con `fake/eszett.log` cuya única línea es
+> `STRASSE`, `./gcsgrep -i strasse gs://fake/eszett.log` imprime
 > `gs://fake/eszett.log:STRASSE` y sale con código `0`, y
 > `./gcsgrep -i 'straße' gs://fake/eszett.log` sale con código `1` con stdout vacío.
 
@@ -463,19 +470,36 @@ leído y sale con código `1`, como una búsqueda sin matches (FR-2).
 > `1` y su stdout es exactamente `gs://$B/logs/db/postgres.log:0` y
 > `gs://$B/logs/db/redis.log:0`.
 
-#### FR-19 · Listar objetos que matchean con `-l`
+#### FR-19a · Listar objetos que matchean con `-l`
 
 **Dado** una ubicación con objetos que matchean,
 **Cuando** la persona ejecuta la búsqueda con `-l`,
 **Entonces** el sistema imprime `gs://<bucket>/<objeto>` una vez por cada objeto con
-al menos un match, deja de leer cada objeto en cuanto encuentra su primer match, y sale
-con código `0`.
+al menos un match, y sale con código `0`.
 
-> **VC-19** — `./gcsgrep -l timeout gs://$B/logs/db/` imprime exactamente
-> `gs://$B/logs/db/postgres.log` y sale con código `0`. Contra el servidor de prueba, con `fake/big.log` de 100 MB cuya primera
-> línea contiene `timeout`, `./gcsgrep -l timeout gs://fake/big.log` sale con código
-> `0` y el servidor registra que el cliente cerró la conexión antes de recibir el
-> cuerpo completo.
+> **VC-19a** — `./gcsgrep -l timeout gs://$B/logs/db/` imprime exactamente
+> `gs://$B/logs/db/postgres.log` y sale con código `0`.
+
+#### FR-19b · Salir con `1` cuando `-l` no lista ningún objeto
+
+**Dado** una ubicación cuyos objetos de texto no contienen el patrón,
+**Cuando** la persona ejecuta la búsqueda con `-l`,
+**Entonces** stdout queda vacío y el sistema sale con código `1`, igual que sin `-l`
+(FR-2).
+
+> **VC-19b** — `./gcsgrep -l palabra_inexistente_xyz gs://$B/logs/db/` sale con
+> código `1` y stdout de 0 bytes.
+
+#### FR-19c · Cortar la lectura de un objeto en su primer match con `-l`
+
+**Dado** un objeto que se está leyendo con `-l`,
+**Cuando** aparece el primer match,
+**Entonces** el sistema deja de leer ese objeto: no consume el resto del contenido.
+
+> **VC-19c** — Contra el servidor de prueba, con `fake/big.log` de 100 MB cuya
+> primera línea contiene `timeout`, `./gcsgrep -l timeout gs://fake/big.log` sale con
+> código `0` y el servidor registra que el cliente cerró la conexión antes de recibir
+> el cuerpo completo.
 
 #### FR-20a · Rechazar `-c` junto con `-l`
 
@@ -1145,7 +1169,8 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | FR-4 | FR-a | VC-4 | feliz |
 | FR-5 | FR-a | VC-5 | falla |
 | FR-6 | Gate de revisión | VC-6 | falla |
-| FR-7 | FR-d | VC-7 | feliz + borde (`ß`/`SS`) |
+| FR-7a | FR-d | VC-7a | feliz |
+| FR-7b | FR-d | VC-7b | borde (`ß`/`SS`) |
 | FR-8 | FR-c | VC-8 | feliz |
 | FR-9a | FR-a | VC-9a | borde (`\r\n`) |
 | FR-9b | FR-a | VC-9b | borde (sin `\n` final) |
@@ -1164,7 +1189,9 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | FR-17c | FR-g + FR-b | VC-17c | borde (marcador de carpeta, progreso) |
 | FR-18a | Pregunta 4 | VC-18a | feliz |
 | FR-18b | Pregunta 4 + Pregunta 8 | VC-18b | borde (todo 0) |
-| FR-19 | Pregunta 4 | VC-19 | feliz |
+| FR-19a | Pregunta 4 | VC-19a | feliz |
+| FR-19b | Pregunta 4 + Pregunta 8 | VC-19b | borde (sin matches) |
+| FR-19c | Pregunta 4 | VC-19c | borde (corte de lectura) |
 | FR-20a | Pregunta 4 | VC-20a | falla |
 | FR-20b | Pregunta 4 | VC-20b | falla |
 | FR-20c | Pregunta 4 | VC-20c | falla |
@@ -1207,7 +1234,7 @@ mensaje que corresponden a la fase (FR-32, FR-33a y FR-33b).
 | NFR-2 | NFR-b | VC-49 | medición |
 | NFR-3 | NFR-c | VC-50 | medición |
 
-**67 requerimientos (55 FR, 9 BR, 3 NFR), 67 VCs, 0 huérfanos.**
+**70 requerimientos (58 FR, 9 BR, 3 NFR), 70 VCs, 0 huérfanos.**
 
 ## Preguntas abiertas
 

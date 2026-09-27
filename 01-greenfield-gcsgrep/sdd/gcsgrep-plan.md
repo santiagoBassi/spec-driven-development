@@ -25,12 +25,12 @@ las siguientes, a medida que hacen falta cosas que GCS real no deja observar
 
 | Iteración | Entrega | Implementa | VCs que cierra |
 |---|---|---|---|
-| 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-8, FR-9a, FR-9b, FR-12, FR-14, FR-15a, FR-15b, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 17 |
-| 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17a, FR-17b, FR-18a, FR-18b, FR-19, FR-20a a FR-20c, BR-5 a BR-7 | 19 (14 propios + VC-7, 12, 15a, 41, 42) |
+| 1 | Búsqueda de punta a punta, secuencial, con guardrail | FR-1, FR-3 a FR-8, FR-9a, FR-9b, FR-12, FR-14, FR-15a, FR-15b, FR-21 a FR-23, FR-35, BR-1 a BR-4, BR-8 | 18 |
+| 2 | Servidor de prueba, sniffing y formatos `-c` / `-l` | FR-2, FR-10, FR-11, FR-17a, FR-17b, FR-18a, FR-18b, FR-19a a FR-19c, FR-20a a FR-20c, BR-5 a BR-7 | 21 (16 propios + VC-7b, 12, 15a, 41, 42) |
 | 3 | Errores de GCS y fallos de red | FR-13a, FR-13b, FR-16a, FR-16b, FR-29a, FR-29b, FR-29c, FR-30a, FR-30b, FR-31, FR-32, FR-33a, FR-33b, FR-34, NFR-3 | 15 |
 | 4 | Concurrencia, progreso y parser estricto | FR-17c, FR-24a, FR-24b, FR-25, FR-26a a FR-26d, FR-27, FR-28, FR-36 a FR-38 | 13 |
 | 5 | NFRs y contrato de scripting | BR-9, NFR-1, NFR-2 | 3 |
-| | | | **67** |
+| | | | **70** |
 
 ---
 
@@ -147,6 +147,8 @@ progreso, flags combinados o repetidos.
 - [ ] VC-4 pasa — regex RE2 con `-E`
 - [ ] VC-5 pasa — regex inválida → `2`, cumple el chequeo P
 - [ ] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
+- [ ] VC-7a pasa — `-i` sin distinguir mayúsculas, incluidas letras no ASCII, sin
+  depender del locale
 - [ ] VC-8 pasa — `-n` numera desde `1`
 - [ ] VC-9a pasa — recorte de `\r` en líneas `\r\n`
 - [ ] VC-9b pasa — la última línea sin `\n` se busca y sale terminada en `\n`
@@ -168,7 +170,6 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
 
 | VC | Evidencia parcial que se busca en la Iteración 1 | Lo que falta observar |
 |---|---|---|
-| VC-7 (FR-7) | `-i timeout` sobre `api.log` → 4 líneas (2 sin `-i`), y `LANG=C -i 'ñandú árbol'` sobre `acentos.log` → `0` (`1` sin `-i`) | Que `ß` no matchee con `SS` (`fake/eszett.log`) |
 | VC-12 (FR-12) | `./gcsgrep timeout gs://$B/logs/app/api.log` → `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` |
 | VC-15a (FR-15a) | Un bucket vacío se trata igual que un prefijo sin objetos, y VC-15b pasa | Bucket existente sin objetos (`empty`) |
 | VC-41 (BR-3) | `--max 5` sobre `edge-cases/` aborta con el mensaje exacto; `--max 6` → `0` | Tope por defecto de 1000 y que no se pida la página siguiente |
@@ -255,14 +256,16 @@ que la Iteración 1 dejó con evidencia parcial.
 - [ ] VC-17b pasa — los marcadores cuentan para `--max`
 - [ ] VC-18a pasa — `-c` con un conteo por objeto, incluidos los `0`
 - [ ] VC-18b pasa — `-c` con todos los conteos en `0` → `1`
-- [ ] VC-19 pasa — `-l` corta la lectura en el primer match
+- [ ] VC-19a pasa — `-l` lista los objetos con al menos un match
+- [ ] VC-19b pasa — `-l` sin ningún match → `1`, stdout vacío
+- [ ] VC-19c pasa — `-l` corta la lectura en el primer match
 - [ ] VC-20a pasa — `-c` con `-l`, en los dos órdenes → `2`, cumple el chequeo P
 - [ ] VC-20b pasa — `-n` con `-c`, en los dos órdenes → `2`, cumple el chequeo P
 - [ ] VC-20c pasa — `-n` con `-l`, en los dos órdenes → `2`, cumple el chequeo P
 - [ ] VC-43 pasa — no-texto salteado sin contar como fallo
 - [ ] VC-44 pasa — bordes de la muestra de 512 bytes
 - [ ] VC-45 pasa — gzip salteado por contenido; `transcoded.log` se busca como texto
-- [ ] VC-7 pasa — `-i` sin plegado de `ß` a `SS` *(implementado en la 1)*
+- [ ] VC-7b pasa — `-i` sin plegado de `ß` a `SS`
 - [ ] VC-12 pasa — objeto puntual sin request de listado *(implementado en la 1)*
 - [ ] VC-15a pasa — el bucket `empty` → `1` *(implementado en la 1)*
 - [ ] VC-41 pasa — tope de 1000 sin paginar de más *(implementado en la 1)*
@@ -397,7 +400,7 @@ y que el parser no acepte nada fuera de la sintaxis de la spec.
 
 **Nota de regresión:** el default cambia de 1 a 4 workers. Los VCs de salida ya
 comparan líneas sin importar el orden entre objetos (convención de la spec), pero
-recién ahora eso se ejercita de verdad. VC-19 (corte de `-l`), VC-29a, VC-29b, VC-29c
+recién ahora eso se ejercita de verdad. VC-19c (corte de `-l`), VC-29a, VC-29b, VC-29c
 y VC-32 (fallo de un objeto con otros en paralelo) son los más sensibles.
 
 **Nota de plataforma:** VC-37 exige Linux. En la laptop (macOS) se corre dentro de
