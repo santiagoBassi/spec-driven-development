@@ -1,6 +1,7 @@
 # gcsgrep — spec
 
-> **Estado: pendiente de revisión.**
+> **Estado: revisada.** Sin preguntas abiertas ni requisitos no atómicos. Habilitada
+> para Planificar/Implementar.
 >
 > Construida a partir de [`gcsgrep-base-context.md`](./gcsgrep-base-context.md).
 >

@@ -1,7 +1,7 @@
 # gcsgrep — plan de iteraciones
 
 > Salida del paso **Planificar**, a partir de [`gcsgrep-spec.md`](./gcsgrep-spec.md)
-> (67 requisitos, 67 VCs, 0 huérfanos).
+> (70 requisitos, 70 VCs, 0 huérfanos).
 >
 > Cada iteración es un contrato chico y verificable: termina con código andando y
 > sus VCs pasando, **más todos los VCs de las iteraciones anteriores**. La siguiente
@@ -430,7 +430,7 @@ umbral para que pase.
   ni `.go:` en todos los casos de falla
 - [ ] VC-48 pasa — mediana < 180 s con 1000 objetos de `$P` y ≥ 50 Mbps medidos
 - [ ] VC-49 pasa — pico ≤ 100 MiB con 1 GB y ≤ 20 MiB más que con 10 MB
-- [ ] **Los 67 VCs pasan en una misma corrida**, y `gcsgrep-cobertura-vc.md`
+- [ ] **Los 70 VCs pasan en una misma corrida**, y `gcsgrep-cobertura-vc.md`
   queda completo
 
 **Si VC-48 no pasa:** el umbral ya contempla la peor latencia medida a `us-east1`
