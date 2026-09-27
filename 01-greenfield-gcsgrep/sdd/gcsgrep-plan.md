@@ -142,26 +142,29 @@ progreso, flags combinados o repetidos.
 
 **Criterios de éxito**
 
-- [ ] VC-1 pasa — literal bajo un prefijo, formato `gs://bucket/objeto:texto`
-- [ ] VC-3 pasa — el patrón es literal sin `-E`
-- [ ] VC-4 pasa — regex RE2 con `-E`
-- [ ] VC-5 pasa — regex inválida → `2`, cumple el chequeo P
-- [ ] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
-- [ ] VC-7a pasa — `-i` sin distinguir mayúsculas, incluidas letras no ASCII, sin
+- [x] VC-1 pasa — literal bajo un prefijo, formato `gs://bucket/objeto:texto`
+- [x] VC-3 pasa — el patrón es literal sin `-E`
+- [x] VC-4 pasa — regex RE2 con `-E`
+- [x] VC-5 pasa — regex inválida → `2`, cumple el chequeo P
+- [x] VC-6 pasa — patrón vacío → `2`, cumple el chequeo P
+- [x] VC-7a pasa — `-i` sin distinguir mayúsculas, incluidas letras no ASCII, sin
   depender del locale
-- [ ] VC-8 pasa — `-n` numera desde `1`
-- [ ] VC-9a pasa — recorte de `\r` en líneas `\r\n`
-- [ ] VC-9b pasa — la última línea sin `\n` se busca y sale terminada en `\n`
-- [ ] VC-14 pasa — ubicaciones inválidas → `2`, cumple el chequeo P
-- [ ] VC-15b pasa — un prefijo sin objetos → `1`, stdout y stderr vacíos
-- [ ] VC-21 pasa — todo lo que sigue a `--` es posicional
-- [ ] VC-22 pasa — flag desconocido → `2`, cumple el chequeo P
-- [ ] VC-23 pasa — cantidad de posicionales distinta de dos → `2`, cumple el chequeo P
-- [ ] VC-35 pasa — sin ADC → `2`, ninguna conexión al listener
-- [ ] VC-39 pasa — la suite de esta iteración corre con `lectora` y `$B` no cambia
-- [ ] VC-40 pasa — `access denied` con `sin-acceso`, match con `lectora`
-- [ ] VC-46 pasa — un match literal tardío y una regex que atraviesa el primer
+- [x] VC-8 pasa — `-n` numera desde `1`
+- [x] VC-9a pasa — recorte de `\r` en líneas `\r\n`
+- [x] VC-9b pasa — la última línea sin `\n` se busca y sale terminada en `\n`
+- [x] VC-14 pasa — ubicaciones inválidas → `2`, cumple el chequeo P
+- [x] VC-15b pasa — un prefijo sin objetos → `1`, stdout y stderr vacíos
+- [x] VC-21 pasa — todo lo que sigue a `--` es posicional
+- [x] VC-22 pasa — flag desconocido → `2`, cumple el chequeo P
+- [x] VC-23 pasa — cantidad de posicionales distinta de dos → `2`, cumple el chequeo P
+- [x] VC-35 pasa — sin ADC → `2`, ninguna conexión al listener
+- [x] VC-39 pasa — la suite de esta iteración corre con `lectora` y `$B` no cambia
+- [x] VC-40 pasa — `access denied` con `sin-acceso`, match con `lectora`
+- [x] VC-46 pasa — un match literal tardío y una regex que atraviesa el primer
   MiB se reportan con salida truncada en `...`
+
+Los 18 pasan (evidencia en [`gcsgrep-cobertura-vc.md`](./gcsgrep-cobertura-vc.md) y
+en [`iterations/01-busqueda-punta-a-punta.md`](./iterations/01-busqueda-punta-a-punta.md)).
 
 **Implementado, pero el VC cierra en la Iteración 2.** Estos requisitos se construyen
 acá porque son parte del camino de punta a punta, pero una parte de su VC solo se
@@ -173,7 +176,12 @@ observa con el servidor de prueba. En `gcsgrep-cobertura-vc.md` figuran como
 | VC-12 (FR-12) | `./gcsgrep timeout gs://$B/logs/app/api.log` → `0`, solo líneas de `api.log` | Que no haya request de listado ni lectura de `a.log.bak` |
 | VC-15a (FR-15a) | Un bucket vacío se trata igual que un prefijo sin objetos, y VC-15b pasa | Bucket existente sin objetos (`empty`) |
 | VC-41 (BR-3) | `--max 5` sobre `edge-cases/` aborta con el mensaje exacto; `--max 6` → `0` | Tope por defecto de 1000 y que no se pida la página siguiente |
-| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, y `--max` sin valor → `2`, todos con el chequeo P | `--max unlimited` leyendo 2500 objetos, y un N más grande que un entero → `0` |
+| VC-42 (BR-4) | Valores inválidos de `--max` → `2`, `--max` sin valor → `2` (con el chequeo P), y un N más grande que un entero → `0` | `--max unlimited` leyendo 2500 objetos |
+
+**Desvío menor (Iteración 1):** el caso de VC-42 "un N más grande que un entero →
+`0`" no necesita el servidor de prueba (no depende de la cantidad real de objetos),
+así que se observó ya en esta iteración con `--max 99999999999999999999` contra
+`$B`, y se sacó de "lo que falta observar".
 
 **Demostrable así:**
 
