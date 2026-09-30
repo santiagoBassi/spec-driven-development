@@ -452,6 +452,11 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
   `make -C regress` expande la lista vacía y termina sin error y sin correr
   ningún test. La CI no lo sufre porque usa `gmake` (`regress.yml:36`); quien
   verifique a mano en macOS, sí (ver línea de base).
+- **Falsos rojos por el shell del usuario:** el runner usa `env -i` y no pasa
+  `$SHELL`, así que los panes de los tests arrancan con el shell de login del
+  usuario. Con un zsh personalizado fallan 13 tests en Linux sin que tmux
+  tenga nada que ver; hay que correr la suite con `SHELL=/bin/sh`
+  (ver línea de base de Linux).
 - **Divergencia con OpenBSD:** código propio de portable dentro de `cmd.c`,
   `spawn.c` o `tmux.h` se arrastra en cada merge, y un refactor de upstream
   puede borrarlo sin que falle nada, como pasó con utempter en 2019
@@ -533,19 +538,69 @@ make
   test (riesgo "runner que no corre nada"). Hay que usar el bucle manual de
   arriba o un make que entienda `!=` (GNU make ≥ 4.0 o bmake).
 
-### Linux — pendiente
+### Linux — medida
 
-No medida todavía: el daemon de Docker no estaba disponible en la máquina de
-exploración. La receta a replicar es la de la CI de upstream
-(`.github/workflows/regress.yml:45-57,73-82`): ubuntu-24.04 con `autoconf`,
-`automake`, `bison`, `build-essential`, `libevent-dev`, `libncurses-dev`,
-`libutf8proc-dev` y `pkg-config`; luego `sh autogen.sh`,
-`./configure --enable-utf8proc --enable-asan`, `make` y `make` dentro de
-`regress/`. Hay que registrar build y suite **antes** de tocar nada. Es el
-lado donde se enlazará el feature. Conviene medir también un build
-`--enable-static`, porque es el que publica `tmux-builds` (hallazgo 11).
+Medida el 2026-09-30 en Ubuntu 24.04.5 x86_64 (nativo, sin contenedor), sobre
+una copia del commit base (`git archive 94796f6`), con gcc 13.3.0, GNU make
+4.3, autoconf 2.71, automake 1.16.5, libevent 2.1.12, ncurses 6.4 y
+utf8proc 3.0.0. Paquetes: los de la CI de upstream
+(`.github/workflows/regress.yml:45-57`).
 
-La línea de base de macOS se midió sin `--enable-asan`, a diferencia de la CI.
+```bash
+sh autogen.sh
+./configure --enable-utf8proc --enable-asan     # igual que la CI
+make -j16
+./tmux -V                                       # tmux next-3.9
+```
+
+- **Build (ASan, como la CI):** compila y enlaza, con 0 warnings. `configure`
+  reporta `platform... linux` y, en el resumen, ASAN on, utf8proc 3.0.0,
+  systemd/sixel/jemalloc/utempter off. Enlaza dinámicamente `libevent_core`,
+  `libtinfo`, `libutf8proc` y `libasan`.
+- **Build estático** (`--enable-static --enable-utf8proc --disable-jemalloc`,
+  los flags de `tmux-builds`, pero con **glibc** en vez de musl): compila y da
+  un binario estático, con 7 warnings del enlazador de glibc (`getaddrinfo`,
+  `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getservbyname`,
+  `getprotobynumber`: "requires at runtime the shared libraries from the glibc
+  version used for linking"). El build musl oficial no se reprodujo.
+- **Suite completa (`regress/*.sh`, 164 tests):** **164 PASS, 0 FAIL**, tanto
+  en serie (~22 min) como en paralelo con `-P16` (dos corridas, ~2 min cada
+  una). Sin errores de AddressSanitizer. Los tests más cercanos al cambio
+  (`pane-ops.sh`, `hooks-notify.sh`, `respawn-pane-control-lag.sh`,
+  `kill-session-process-exit.sh`, `list-commands.sh`) pasan.
+- **Referencias para los VCs del límite:** `nm tmux` no tiene ningún símbolo
+  que contenga "ssh" (ni en el build ASan ni en el estático), y
+  `list-commands` devuelve 92 comandos.
+
+**Trampa del entorno: el shell del pane.** La primera corrida (`make -j16` en
+`regress/`, desde una sesión con zsh) dio 151 PASS y 13 FAIL. Ninguna era de
+tmux: el runner limpia el entorno con `env -i` (`regress/Makefile`), así que no
+hay `$SHELL`, y tmux usa como `default-shell` el shell de login del usuario
+según `/etc/passwd` (acá `/usr/bin/zsh`, con su `.zshrc`). Ese zsh cambia el
+título de la ventana en cada prompt (`check-names.sh` recibe
+`..-asan/regress` en vez de `escape#:.ok`) y tarda en arrancar (los tests que
+tipean dentro de un pane y esperan `sleep 1` fallan: `copy-mode-redraw.sh`,
+`screen-redraw-fill-character.sh`, `screen-redraw-menus.sh` y, con carga en
+paralelo, 9 más de `screen-redraw-*` y `cmd-template-replace.sh`). Agregando
+`SHELL=/bin/sh` al `env -i` pasan las 164. **La receta reproducible es:**
+
+```bash
+cd regress
+for t in *.sh; do
+  env -i LC_CTYPE=C.UTF-8 MallocNanoZone=0 SHELL=/bin/sh sh -x "$t" \
+    >"logs/${t%.sh}.log" 2>&1 && echo "PASS $t" || echo "FAIL $t"
+done
+```
+
+En la CI no aparece porque el usuario del runner tiene `bash` sin
+personalizar. Si la verificación del feature da rojo en `screen-redraw-*` o
+`check-names.sh`, primero hay que descartar esto.
+
+La línea de base de macOS se midió sin `--enable-asan`, a diferencia de la CI
+y de la de Linux. La falla de `screen-redraw-menus.sh` en macOS podría tener la
+misma causa (el shell por defecto de macOS también es zsh): en Linux ese test
+fallaba con zsh y pasa con `SHELL=/bin/sh`. **No se verificó en macOS**; hasta
+volver a correrlo ahí con `SHELL=/bin/sh`, sigue anotado como preexistente.
 
 No se identificó una prueba de cliente SSH nativo en `regress/`; la spec
 debería prever una prueba con servidor SSH controlado en Linux y una
