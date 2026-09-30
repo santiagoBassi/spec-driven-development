@@ -1317,14 +1317,14 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 
 | Requerimiento | Origen | VC | Camino |
 |---|---|---|---|
-| FR-1 | Enunciado + D-2, D-3 | VC-1 | feliz (build) |
-| FR-2 | Enunciado ("solo Linux") + D-3 | VC-2 | falla (build) |
+| FR-1 | Pedido + D-2, D-3 | VC-1 | feliz (build) |
+| FR-2 | Pedido ("solo en Linux") + D-3 | VC-2 | falla (build) |
 | FR-3a | D-3 | VC-3a | falla (build) |
 | FR-3b | D-2, D-3 | VC-3b | borde (versión) |
 | FR-4 | D-3 + hallazgos 9 y 11 | VC-4 | falla (build) |
 | FR-5 | D-3 | VC-5 | borde (build) |
-| FR-6 | Enunciado + D-1, D-7 | VC-6 | feliz |
-| FR-7 | Enunciado ("sin invocar `ssh`") + D-1 | VC-7 | invariante |
+| FR-6 | Pedido + D-1, D-7 | VC-6 | feliz |
+| FR-7 | Pedido ("sin invocar el binario `ssh`") + D-1 | VC-7 | invariante |
 | FR-8 | D-7 | VC-8 | feliz |
 | FR-9 | D-7 | VC-9 | feliz |
 | FR-10 | D-7 | VC-10 | feliz |
@@ -1350,8 +1350,8 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-26 | D-8 | VC-26 | borde (puerto) |
 | FR-27 | D-8 | VC-27 | borde (hasheado) |
 | FR-28 | D-8 | VC-28 | borde (archivo global) |
-| FR-29 | Enunciado ("auth por agent") + D-9 | VC-29 | feliz |
-| FR-30 | Enunciado ("auth por claves") + D-9 | VC-30 | feliz |
+| FR-29 | Pedido (autenticación por agente) + D-9 | VC-29 | feliz |
+| FR-30 | Pedido (autenticación por claves) + D-9 | VC-30 | feliz |
 | FR-31 | D-9 | VC-31 | borde (orden) |
 | FR-32a | D-9 | VC-32a | borde (orden) |
 | FR-32b | D-9 | VC-32b | borde (clave rechazada) |
@@ -1395,15 +1395,15 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | BR-3b | D-10 | VC-BR-3b | borde (sin `HOME`) |
 | BR-4 | D-8 | VC-BR-4 | invariante |
 | BR-5 | D-12 | VC-BR-5 | invariante |
-| INV-1 | Enunciado + D-6, D-15 | VC-INV-1 | invariante (build) |
-| INV-2 | Enunciado + D-6, D-15 | VC-INV-2 | invariante (build) |
+| INV-1 | Pedido + D-6, D-15 | VC-INV-1 | invariante (build) |
+| INV-2 | Pedido + D-6, D-15 | VC-INV-2 | invariante (build) |
 | INV-3 | D-3, D-6 | VC-INV-3 | invariante (build) |
-| INV-4 | Enunciado ("el modelo de PTY/panes no cambia") + D-1 | VC-INV-4 | invariante |
-| INV-5 | Enunciado ("los comandos existentes no cambian") | VC-INV-5 | invariante |
+| INV-4 | Pedido ("sin cambiar […] el modelo de PTY/panes") + D-1 | VC-INV-4 | invariante |
+| INV-5 | Pedido ("sin cambiar los comandos existentes") | VC-INV-5 | invariante |
 | INV-6 | Hallazgo 11 + D-15 | VC-INV-6 | invariante |
 | INV-7 | Hallazgo 12 + D-5 | VC-INV-7 | invariante |
 | INV-8 | Hallazgo 11 + D-3 | VC-INV-8 | invariante (build) |
-| INV-9 | Lección 2 (superficie acotada) + D-4 | VC-INV-9 | invariante (alcance) |
+| INV-9 | Alcance ("Dentro" / "Fuera") + D-4 | VC-INV-9 | invariante (alcance) |
 | NFR-1 | Hallazgo 3 + D-1 | VC-NFR-1 | medición |
 | NFR-2 | D-12 | VC-NFR-2 | medición |
 

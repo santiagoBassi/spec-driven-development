@@ -10,10 +10,11 @@
 
 ## 1. Pedido refinado
 
-El enunciado pide un **cliente SSH nativo** en tmux: un comando nuevo que abra un
+Se pide un **cliente SSH nativo** en tmux: un comando nuevo que abra un
 pane con una sesión remota **sin invocar el binario `ssh`**, que se compile **solo en
 Linux**, sin romper los builds de macOS y BSD, y sin cambiar los comandos existentes ni
-el modelo de PTY/panes.
+el modelo de PTY/panes. La autenticación puede ser por claves o por agente (D-9).
+La spec cita este párrafo como "Pedido".
 
 Refinado con las decisiones de abajo:
 
@@ -81,8 +82,8 @@ dejara de ser aceptable, esa es la alternativa a retomar.
 | Hijo que re-ejecuta tmux (`/proc/self/exe`) en un modo interno | Imagen de proceso limpia (evita el costo de seguridad de arriba), pero agrega un punto de entrada oculto en `tmux.c` (archivo de OpenBSD, hallazgo 10) y hay que pasar los datos de conexión por argv o por el entorno, donde quedan visibles |
 | Cliente SSH en el servidor, con un socket registrado en libevent (patrón `job.c`) | El pane no tendría hijo ni PTY: habría que reescribir entrada, salida, resize y cierre (hallazgos 3 y 4). Rompe el invariante "el modelo de PTY/panes no cambia", y un error de no bloqueo congela todas las sesiones |
 | Pane vacío (`-E`, `SPAWN_EMPTY`) al que se le inyecta la salida | Con `fd = -1` tmux descarta teclado, pegado y resize (hallazgo 5): habría que crear rutas nuevas para todo eso |
-| Pasar `ssh` como `shell-command` | Ejecuta el binario externo: es justo lo que el enunciado excluye (hallazgo 2) |
-| Sesiones remotas por *control mode* ([#5566](https://github.com/tmux/tmux/issues/5566)) | Es la dirección que prefiere upstream, pero exige un tmux en el host remoto y delega la red a `ssh`. No es un cliente SSH nativo, que es lo que pide el enunciado. Se registra como alternativa de upstream, no como camino de este cambio |
+| Pasar `ssh` como `shell-command` | Ejecuta el binario externo: es justo lo que el pedido excluye (hallazgo 2) |
+| Sesiones remotas por *control mode* ([#5566](https://github.com/tmux/tmux/issues/5566)) | Es la dirección que prefiere upstream, pero exige un tmux en el host remoto y delega la red a `ssh`. No es un cliente SSH nativo, que es lo que se pide. Se registra como alternativa de upstream, no como camino de este cambio |
 
 ### D-2 · Biblioteca SSH
 
@@ -283,7 +284,7 @@ Los datos de conexión viajan en `spawn_context` y quedan en el pane (D-13), nun
 | Todos los flags de `split-window` | Varios no tienen un significado obvio para un pane remoto (`-c` directorio local, `-e` entorno, `-W` espera): mucha superficie sin pedido |
 | `host:port` en el destino | Choca con los literales IPv6 (`::1`) |
 | Aceptar literales IPv6 (`::1` o `[::1]`) | Hay que fijar el formato con corchetes en el destino, en `known_hosts` y en los mensajes, y sumar un listener IPv6 al entorno de prueba. Se puede sumar en otra iteración sin cambiar lo que ya existe, porque hoy son un error |
-| Pane flotante (como `new-pane`), en lugar del split o además de él (decisión pendiente 1) | Los flotantes suman posición, tamaño, bordes, estilos y modo modal (`-x`, `-y`, `-X`, `-Y`, `-B`, `-s`, `-S`, `-R`, `-O`, `-M`; `cmd-split-window.c:40-49`), cada uno con su requisito. El enunciado pide "un pane", y el split lo cumple con el layout que ya existe. Una variante flotante se puede sumar después como flag nuevo |
+| Pane flotante (como `new-pane`), en lugar del split o además de él (decisión pendiente 1) | Los flotantes suman posición, tamaño, bordes, estilos y modo modal (`-x`, `-y`, `-X`, `-Y`, `-B`, `-s`, `-S`, `-R`, `-O`, `-M`; `cmd-split-window.c:40-49`), cada uno con su requisito. El pedido es "un pane", y el split lo cumple con el layout que ya existe. Una variante flotante se puede sumar después como flag nuevo |
 | Sobre un objetivo flotante, crear otro flotante como `split-window` (`cmd-split-window.c:110,175-178`) | El pane tendría la geometría por defecto de `layout_get_floating_cell`, que habría que especificar sin flags para cambiarla: es la superficie flotante que esta decisión deja afuera. Un error explícito es verificable y se puede levantar cuando se sume la variante flotante |
 | Sin `-h` ni `-d` (solo `-t` y `-p`) | El comando serviría solo para partir hacia abajo y robando el foco: no se podría armar un layout lado a lado ni abrir el pane desde `.tmux.conf` sin mover el foco |
 | Datos de conexión en `sc.argv` | `spawn_pane` los trataría como comando local, les aplicaría `default-command` y los registraría como `cmd=` (hallazgo 2) |
@@ -320,7 +321,7 @@ más estricto que `ssh`, que también lee el archivo global.
 
 ### D-9 · Autenticación
 
-*Decisión pendiente 3. Enunciado: "¿auth por claves o por agent?".*
+*Decisión pendiente 3: ¿autenticación por claves o por agente?*
 
 **Elegido:** **agente primero, después las claves por defecto sin passphrase.**
 
@@ -485,12 +486,12 @@ fuera de la superficie mínima. El valor es predecible y queda fijado por un req
 
 ### D-15 · Plataformas donde se verifica
 
-*Invariante del enunciado: "los builds no-Linux siguen compilando". Hallazgo 11.*
+*Invariante del pedido: los builds no-Linux siguen compilando. Hallazgo 11.*
 
 **Elegido:** **Linux** (Ubuntu 24.04 x86_64, la de la línea de base) con y sin
 `--enable-ssh`, **macOS** y **FreeBSD**.
 
-**Fundamento:** el enunciado nombra macOS y BSD. La CI de upstream solo cubre macOS
+**Fundamento:** el pedido nombra macOS y BSD. La CI de upstream solo cubre macOS
 como no Linux, y no corre ni en PRs ni en forks (hallazgo 11), así que la comprobación
 la hace el equipo. FreeBSD es el BSD que compila tmux **portable** con `configure`;
 OpenBSD compila su propio árbol con su `Makefile` (hallazgo 10), que este cambio no
@@ -506,7 +507,7 @@ se midió, no queda como un pendiente de la spec, y la de macOS, que se midió s
 
 | Opción | Por qué no |
 |---|---|
-| Solo macOS | No cubre "BSD" del enunciado |
+| Solo macOS | No cubre "BSD" del pedido |
 | Sumar tmux portable en OpenBSD | Otra VM que mantener, para una plataforma que en la práctica usa el árbol de OpenBSD |
 
 ### D-16 · Postura frente a upstream
@@ -527,7 +528,7 @@ el feature no existe fuera de Linux, esa restricción no se toca.
 | Opción | Por qué no |
 |---|---|
 | Diseñar el cambio para proponerlo upstream | El mantenedor ya eligió otra dirección (#1643, #5566); la spec dependería de una aceptación que no va a llegar |
-| Reemplazar el pedido por sesiones remotas con *control mode* | Es la dirección de upstream, pero no es un cliente SSH nativo: no cumple el enunciado (D-1) |
+| Reemplazar el pedido por sesiones remotas con *control mode* | Es la dirección de upstream, pero no es un cliente SSH nativo: no cumple el pedido (D-1) |
 
 ## 3. Esquema de arquitectura
 
