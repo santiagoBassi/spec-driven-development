@@ -239,6 +239,10 @@ cualquier diferencia entre versiones de tmux.
   defecto, 22.
 - `[user@]host`: exactamente un argumento. Sin `user@`, el usuario es el nombre de la
   cuenta local del proceso (`getpwuid(getuid())`), no `$USER`, igual que `ssh`.
+- `host` no puede contener `:`: los literales IPv6 (`::1`, `[::1]`) se rechazan como
+  destino inválido. Un nombre que resuelva a una dirección IPv6 sí se acepta.
+- No crea panes flotantes: no tiene los flags de `new-pane`, y si el pane objetivo es
+  flotante el comando falla con `target pane is floating`.
 - **No se lee `~/.ssh/config`.**
 - **Sin hook propio.** No dispara `after-split-window` y no existe `after-ssh-pane`:
   la entrada no lleva `CMD_AFTERHOOK` (`cmd-queue.c:629-638`) y el ejecutor no llama a
@@ -253,6 +257,17 @@ Los datos de conexión viajan en `spawn_context` y quedan en el pane (D-13), nun
 - Con pocos flags, cada uno tiene un requisito y un VC. Los de `split-window` que no
   están (`-b`, `-f`, `-l`, `-Z`, `-c`, `-e`, `-F`/`-P`, `-T`, `-W`, `-I`, `-E`, …)
   quedan fuera de la v1.
+- `-t` y `-p` son indispensables: sin `-t` no se puede usar desde un binding o un
+  script sobre otro pane, y sin `-p` no se llega a un servidor fuera del 22 (el
+  entorno de prueba usa el 2222). `-h` y `-d` entran porque son las dos decisiones
+  que toma cualquier binding que abre un pane: hacia dónde parte y si le pasa el
+  foco. Sin `-h`, un layout lado a lado es imposible; sin `-d`, abrir un pane en
+  segundo plano (por ejemplo, desde `.tmux.conf`) roba el foco. Los dos reusan la
+  lógica de `split-window` (`cmd-split-window.c:79-208`), así que no agregan código
+  de layout propio.
+- Los literales IPv6 se rechazan porque con ellos el destino, `known_hosts`
+  (`[::1]:2222`) y los mensajes `<host>:<port>` necesitan reglas de corchetes que
+  la v1 no especifica. Se cubre el caso común (un nombre) sin esa superficie.
 - `-v` se omite porque es el default. Con `-v`, habría que especificar qué pasa con
   `-h -v`.
 - Sin `~/.ssh/config`, el comportamiento no depende de un archivo con decenas de
@@ -267,6 +282,10 @@ Los datos de conexión viajan en `spawn_context` y quedan en el pane (D-13), nun
 | Leer `~/.ssh/config` con `ssh_options_parse_config` | La spec tendría que fijar qué directivas se respetan, y cada una sería un requisito. Se puede sumar en otra iteración |
 | Todos los flags de `split-window` | Varios no tienen un significado obvio para un pane remoto (`-c` directorio local, `-e` entorno, `-W` espera): mucha superficie sin pedido |
 | `host:port` en el destino | Choca con los literales IPv6 (`::1`) |
+| Aceptar literales IPv6 (`::1` o `[::1]`) | Hay que fijar el formato con corchetes en el destino, en `known_hosts` y en los mensajes, y sumar un listener IPv6 al entorno de prueba. Se puede sumar en otra iteración sin cambiar lo que ya existe, porque hoy son un error |
+| Pane flotante (como `new-pane`), en lugar del split o además de él (decisión pendiente 1) | Los flotantes suman posición, tamaño, bordes, estilos y modo modal (`-x`, `-y`, `-X`, `-Y`, `-B`, `-s`, `-S`, `-R`, `-O`, `-M`; `cmd-split-window.c:40-49`), cada uno con su requisito. El enunciado pide "un pane", y el split lo cumple con el layout que ya existe. Una variante flotante se puede sumar después como flag nuevo |
+| Sobre un objetivo flotante, crear otro flotante como `split-window` (`cmd-split-window.c:110,175-178`) | El pane tendría la geometría por defecto de `layout_get_floating_cell`, que habría que especificar sin flags para cambiarla: es la superficie flotante que esta decisión deja afuera. Un error explícito es verificable y se puede levantar cuando se sume la variante flotante |
+| Sin `-h` ni `-d` (solo `-t` y `-p`) | El comando serviría solo para partir hacia abajo y robando el foco: no se podría armar un layout lado a lado ni abrir el pane desde `.tmux.conf` sin mover el foco |
 | Datos de conexión en `sc.argv` | `spawn_pane` los trataría como comando local, les aplicaría `default-command` y los registraría como `cmd=` (hallazgo 2) |
 | Hook `after-ssh-pane` | Cada hook `after-<comando>` es una entrada de `options-table.c` (`OPTIONS_TABLE_AFTER_HOOK`, `options-table.c:273-275,1932`); sin ella, `set-hook` lo rechaza con `invalid option`. Sumarlo toca un archivo de OpenBSD más, sin pedido concreto |
 | Disparar `after-split-window` | El hook promete que corrió `split-window`; un script que lo escuche recibiría un pane que no pidió |
@@ -281,7 +300,9 @@ y coincide. `<dir-ssh>` es el de D-10. Host desconocido, archivo ausente o clave
 distinta: el hijo termina con error y no escribe nada en `known_hosts`. No se consulta
 `/etc/ssh/ssh_known_hosts`. Las entradas hasheadas (`HashKnownHosts yes`, el default de
 Ubuntu) se reconocen. Para un puerto distinto de 22 vale la convención de OpenSSH: la
-entrada es `[host]:puerto`.
+entrada es `[host]:puerto`. Si las únicas entradas del host y el puerto son de otro
+tipo de clave que la que presenta el servidor, se trata como **clave distinta**, no
+como host desconocido.
 
 **Fundamento:** con una sola fuente de verdad, bajo control de la persona, el
 comando nunca acepta una clave que la persona no haya agregado. Además, el entorno de
@@ -295,6 +316,7 @@ más estricto que `ssh`, que también lee el archivo global.
 | Preguntar en el pane (*trust on first use*) y agregar la clave | Escribe en el HOME de la persona y suma un diálogo interactivo que especificar (respuestas, eco, timeout). Hoy basta con agregar la clave con las herramientas habituales antes de conectar |
 | Consultar también `/etc/ssh/ssh_known_hosts` | Una segunda fuente que la persona no controla y que el entorno de prueba tendría que vaciar |
 | No verificar | Expone a *man in the middle*. Inaceptable en un cliente SSH |
+| Tratar una entrada de otro tipo de clave como host desconocido | El host sí está registrado: que presente otro tipo de clave es tan sospechoso como una clave distinta. "Not found" llevaría a la persona a agregar la clave nueva sin revisar |
 
 ### D-9 · Autenticación
 
@@ -305,8 +327,9 @@ más estricto que `ssh`, que también lee el archivo global.
 1. El agente, si `SSH_AUTH_SOCK` del entorno del pane apunta a un socket que responde:
    se prueban sus identidades.
 2. Si no hay agente, o ninguna identidad fue aceptada, se prueban en este orden
-   `<dir-ssh>/id_ed25519`, `<dir-ssh>/id_ecdsa` y `<dir-ssh>/id_rsa`. Las que no existen
-   o tienen passphrase se saltean sin pedir nada.
+   `<dir-ssh>/id_ed25519`, `<dir-ssh>/id_ecdsa` y `<dir-ssh>/id_rsa`. Las que no existen,
+   tienen passphrase, no se pueden leer o no son una clave válida se saltean sin pedir
+   ni escribir nada.
 3. Si ninguna fue aceptada, el hijo termina con error.
 
 Nunca se prueban contraseña ni *keyboard-interactive*, y nunca se lee nada del teclado
@@ -326,6 +349,8 @@ clientes de control, hallazgo 3).
 | Pedir la passphrase de la clave en el pane | Agrega un diálogo, el caso de passphrase incorrecta y el manejo del eco. El agente ya lo resuelve |
 | Contraseña del usuario remoto | Es lo que más diálogo y más casos de falla agrega, y la persona tipearía un secreto en un pane cuya salida puede estar en `pipe-pane` |
 | Solo agente | Quien usa claves sin agente no podría usar el comando |
+| Solo claves por defecto | Quien tiene la clave con passphrase (lo recomendado) no podría usar el comando, porque el pedido de passphrase está descartado. El agente es la forma de usar esas claves sin que tmux maneje el secreto |
+| Cortar con error ante una clave ilegible o inválida | Una clave rota que la persona no usa (por ejemplo, un `id_rsa` viejo) impediría conectar aunque otra identidad sirva. `ssh` también la saltea y sigue |
 
 ### D-10 · Directorio SSH local
 
@@ -378,7 +403,9 @@ un error del comando**. El hijo escribe una línea `ssh-pane: …` en el PTY (se
 pane) y sale con código `255`, como `ssh`. Después el pane sigue `remain-on-exit`:
 si está en `off`, se cierra y el mensaje se pierde. Con `on`, queda muerto, con el
 mensaje visible y `pane_dead_status` = `255`. Si la shell remota termina con un
-código, el hijo sale con ese código.
+código, el hijo sale con ese código. Si termina por una señal (`exit-signal`, sin
+código), el hijo escribe `ssh-pane: <host>:<port>: remote shell killed by signal <SEÑAL>`
+y sale con `255`, como `ssh`.
 
 Conectar y autenticar tienen un plazo **fijo de 30 s**, desde que empieza el hijo
 hasta que la shell remota queda abierta. Si se cumple, el hijo termina con el mensaje
@@ -398,6 +425,8 @@ TCP puede tardar más de dos minutos en Linux.
 | Mensaje en la línea de estado del cliente | El hijo no tiene canal hacia el cliente; habría que crear uno hijo→servidor |
 | Esperar la conexión antes de devolver el comando | Bloquearía la cola de comandos del cliente, o haría falta un mecanismo como `-W` (`window.c:1438-1460`) |
 | Plazo configurable | Una opción más sin pedido; 30 s alcanza para redes lentas y acota la espera |
+| Señal remota como `128 + N` (convención de las shells) | Los números de señal pueden cambiar entre el host remoto y el local, y el protocolo informa el nombre, no el número. Con `255` y el nombre en el pane, el código sigue significando "no hubo código de salida remoto" |
+| Señal remota como "connection lost" | Es falso: la conexión terminó bien y el servidor informó qué pasó |
 
 ### D-13 · Qué recuerda el pane
 
@@ -439,7 +468,8 @@ comando (`spawn.c:396-404`), toda la lógica queda en `spawn.c`, y
 SSH, `pane_current_command` es `tmux`, porque el hijo es un `fork` del servidor y
 `osdep_get_name` lee `argv[0]` de `/proc/<pgrp>/cmdline` (`osdep-linux.c:29-61`;
 `format.c:953-975`). `pane_current_path` es el directorio local del hijo. La
-documentación de `ssh-pane` lo aclara.
+documentación de `ssh-pane` lo aclara. `pane_start_command` es la cadena vacía,
+porque el pane no guarda argumentos (D-13; `format.c:896-906`).
 
 **Fundamento:** adaptarlos obliga a tocar `format.c` y `osdep-linux.c`, código común a
 todos los panes y, en el caso de `format.c`, archivo de OpenBSD. Así el cambio queda
@@ -451,6 +481,7 @@ fuera de la superficie mínima. El valor es predecible y queda fijado por un req
 |---|---|
 | Mostrar el comando o el directorio remotos | No hay forma de saberlos sin un protocolo adicional con el host remoto |
 | Mostrar `ssh-pane` en `pane_current_command` | Requiere una rama nueva en `format.c` y cambia la semántica del formato ("el proceso en primer plano del PTY") |
+| Mostrar el destino en `pane_start_command` | Habría que guardarlo en `wp->argv`, y entonces `respawn-pane` y `spawn_pane` lo tratarían como comando local (D-7, D-13), o agregar una rama en `format.c`. El destino ya se informa en `pane-created` |
 
 ### D-15 · Plataformas donde se verifica
 

@@ -42,7 +42,7 @@ feature exista en los builds que no son Linux.
 | `tmux.h` | Datos de conexión en `struct window_pane` (`tmux.h:1361-1390`) y en `struct spawn_context` (`tmux.h:2499-2532`), y prototipos, bajo `#ifdef ENABLE_SSH` | OpenBSD |
 | `spawn.c` | Bajo `#ifdef ENABLE_SSH`: guardar el destino en el pane, conservarlo o borrarlo en un respawn (`spawn.c:396-404`), informar `pane_command` en `pane-created` (`spawn.c:74-110`) y, en el hijo, llamar al puente en lugar de hacer `exec` (`spawn.c:546-575`) | OpenBSD |
 | `window.c` | Liberar los datos de conexión al destruir el pane, bajo `#ifdef ENABLE_SSH` | OpenBSD |
-| `tmux.1` | Entrada de `ssh-pane` junto a `split-window` (`tmux.1:4087`), que aclare que existe solo en Linux con `--enable-ssh` y qué muestran `pane_current_command` y `pane_current_path` (D-14) | OpenBSD |
+| `tmux.1` | Entrada de `ssh-pane` junto a `split-window` (`tmux.1:4087`), que aclare que existe solo en Linux con `--enable-ssh` y qué muestran `pane_current_command`, `pane_current_path` y `pane_start_command` (D-14) | OpenBSD |
 | `regress/ssh-pane-*.sh` (nuevos) | Pruebas automatizadas de los VCs que corren en el host Linux de prueba; se saltean si el comando no existe (INV-6) | portable |
 
 ### Fuera
@@ -89,6 +89,9 @@ Por funcionalidad. Cada ítem es una decisión tomada, no un olvido:
 - Claves distintas de `id_ed25519`, `id_ecdsa` e `id_rsa`, o elegidas por flag (D-9).
 - Comando remoto, variables de entorno hacia el remoto, reenvío de agente, X11 o
   puertos (D-11).
+- Crear un pane flotante, o partir un pane objetivo flotante (FR-21b, D-7).
+- Literales IPv6 como host (`::1`, `[::1]`); un nombre que resuelva a IPv6 sí se
+  acepta (FR-17b, D-7).
 - Plazo de conexión configurable (D-12).
 - Mostrar el comando o el directorio remotos en los formatos (D-14).
 - Proponer el cambio a upstream (D-16).
@@ -178,7 +181,8 @@ Los VCs corren contra estos entornos. Construirlos es parte del plan, no de la s
   `HostKey` = la clave ed25519 fija `HK_A`, `PubkeyAuthentication yes`,
   `PasswordAuthentication yes`, `KbdInteractiveAuthentication yes`, `AcceptEnv *`,
   `AllowAgentForwarding yes` y `LogLevel VERBOSE` (registra la huella de la clave
-  aceptada). `HK_B` es otra clave ed25519 que el servidor **no** usa.
+  aceptada). `HK_B` es otra clave ed25519 y `HK_C` una clave rsa; el servidor **no**
+  usa ninguna de las dos.
 - **Otros puertos.** Listener mudo en `127.0.0.1:2223` (`nc -lk 127.0.0.1 2223`: acepta
   TCP y no envía nada). Nada escucha en `127.0.0.1:2224`.
 - **HOME de prueba `$T`.** Un directorio temporal nuevo por VC. La configuración
@@ -419,7 +423,7 @@ iniciar ninguna conexión. Un signo, un espacio o un punto invalidan el valor.
 > **VC-16** — `tm ssh-pane -p` es un error del comando con el mensaje
 > `command ssh-pane: -p expects an argument`.
 
-#### FR-17 · Rechazar un destino con formato inválido
+#### FR-17a · Rechazar un destino con formato inválido
 
 **Dado** una invocación que en todo lo demás es válida,
 **Cuando** el destino no tiene la forma `[user@]host`, con `user` y `host` no vacíos y a
@@ -427,8 +431,21 @@ lo sumo un `@`,
 **Entonces** el comando falla con `invalid destination: "<destino>"`, sin crear ningún
 pane ni iniciar ninguna conexión.
 
-> **VC-17** — Para cada uno de `@127.0.0.1`, `tester@`, `a@b@127.0.0.1` y la cadena
+> **VC-17a** — Para cada uno de `@127.0.0.1`, `tester@`, `a@b@127.0.0.1` y la cadena
 > vacía, `tm ssh-pane -t %0 -p 2222 <destino>` es un error del comando con el mensaje
+> `invalid destination: "<destino>"`, y `/var/log/sshd-vc.log` no registra ninguna
+> conexión nueva.
+
+#### FR-17b · Rechazar un host que contiene `:`
+
+**Dado** una invocación que en todo lo demás es válida,
+**Cuando** la parte `host` del destino contiene el carácter `:`, como un literal IPv6,
+**Entonces** el comando falla con `invalid destination: "<destino>"`, sin crear ningún
+pane ni iniciar ninguna conexión. Para llegar a un host IPv6 se usa un nombre que
+resuelva a esa dirección (D-7).
+
+> **VC-17b** — Para cada uno de `tester@::1` y `[::1]`,
+> `tm ssh-pane -t %0 -p 2222 <destino>` es un error del comando con el mensaje
 > `invalid destination: "<destino>"`, y `/var/log/sshd-vc.log` no registra ninguna
 > conexión nueva.
 
@@ -474,21 +491,36 @@ pane ni iniciar ninguna conexión.
 > **VC-20** — `tm ssh-pane -t %99 -p 2222 tester@127.0.0.1` es un error del comando con
 > el mensaje `can't find pane: %99`.
 
-#### FR-21 · Rechazar cuando no hay espacio para el pane
+#### FR-21a · Rechazar cuando no hay espacio para el pane
 
 **Dado** un pane objetivo demasiado chico para partirlo,
 **Cuando** la persona ejecuta `ssh-pane`,
 **Entonces** el comando falla con el mismo mensaje que `split-window` en la misma
 situación, `no space for a new pane` (`layout.c:1692`), sin iniciar ninguna conexión.
 
-> **VC-21** — Con un servidor arrancado con `tm new -d -x 80 -y 2`,
+> **VC-21a** — Con un servidor arrancado con `tm new -d -x 80 -y 2`,
 > `tm split-window -t %0` y `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1` son errores del
 > comando con el mismo mensaje, `no space for a new pane`, y `/var/log/sshd-vc.log` no
 > registra ninguna conexión nueva.
 
+#### FR-21b · Rechazar un pane objetivo flotante
+
+**Dado** un pane objetivo flotante (creado con `new-pane`),
+**Cuando** la persona ejecuta `ssh-pane` sobre él,
+**Entonces** el comando falla con `target pane is floating`, sin crear ningún pane ni
+iniciar ninguna conexión. A diferencia de `split-window`, que sobre un pane flotante
+crea otro flotante (`cmd-split-window.c:110,175-178`), `ssh-pane` solo parte panes del
+layout (D-7).
+
+> **VC-21b** — `tm new-pane -t %0` (crea `%1`, flotante:
+> `tm display -p -t %1 '#{pane_floating_flag}'` imprime `1`);
+> `tm ssh-pane -t %1 -p 2222 tester@127.0.0.1` sale con código `1` y stderr exactamente
+> `target pane is floating`; después, `tm list-panes | wc -l` sigue siendo `2` y
+> `/var/log/sshd-vc.log` no registra ninguna conexión nueva.
+
 #### FR-22 · Reportar un solo error de invocación
 
-**Dado** una invocación con más de un error de los que cubren FR-15 a FR-21,
+**Dado** una invocación con más de un error de los que cubren FR-15 a FR-21b,
 **Cuando** la persona la ejecuta,
 **Entonces** el comando informa uno solo, sale con código `1` y no crea ningún pane.
 Cuál de los errores se informa no está especificado.
@@ -525,18 +557,32 @@ existir.
 > `ssh-pane: 127.0.0.1:2222: host key not found in known_hosts`; el estado del pane es
 > `1 255`; `$T/.ssh/known_hosts` no existe.
 
-#### FR-25 · Rechazar una clave de host distinta de la registrada
+#### FR-25a · Rechazar una clave de host distinta de la registrada
 
-**Dado** un `known_hosts` con una entrada para el host y el puerto cuya clave no es la
-que presenta el servidor,
+**Dado** un `known_hosts` con una entrada para el host y el puerto, del mismo tipo que
+la clave que presenta el servidor pero con otra clave,
 **Cuando** la persona ejecuta `ssh-pane` hacia ese destino,
 **Entonces** el hijo no se autentica, escribe
 `ssh-pane: <host>:<port>: host key does not match known_hosts` y termina según BR-5.
 
-> **VC-25** — Con remain-on-exit y `$T/.ssh/known_hosts` con la sola línea
+> **VC-25a** — Con remain-on-exit y `$T/.ssh/known_hosts` con la sola línea
 > `[127.0.0.1]:2222 <HK_B>`, `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`: esperar
 > `ssh-pane: 127.0.0.1:2222: host key does not match known_hosts`; el estado del pane
 > es `1 255`.
+
+#### FR-25b · Rechazar una clave de host de otro tipo que la registrada
+
+**Dado** un `known_hosts` cuyas únicas entradas para el host y el puerto son de un tipo
+de clave distinto del que presenta el servidor,
+**Cuando** la persona ejecuta `ssh-pane` hacia ese destino,
+**Entonces** el host se trata como una clave distinta, según FR-25a, y no como un host
+desconocido (D-8).
+
+> **VC-25b** — Con remain-on-exit y `$T/.ssh/known_hosts` con la sola línea
+> `[127.0.0.1]:2222 <HK_C>` (rsa), `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`: esperar
+> `ssh-pane: 127.0.0.1:2222: host key does not match known_hosts`; el estado del pane
+> es `1 255`; `/var/log/sshd-vc.log` no contiene `Accepted` ni `Failed` para esa
+> conexión.
 
 #### FR-26 · No usar una entrada sin puerto para otro puerto
 
@@ -639,7 +685,7 @@ un `<dir-ssh>/id_ecdsa` autorizado,
 > `/var/log/sshd-vc.log` contiene `Accepted publickey for tester` con la huella de
 > `K_ec`.
 
-#### FR-33 · Saltear una clave con passphrase sin pedirla
+#### FR-33a · Saltear una clave con passphrase sin pedirla
 
 **Dado** un entorno sin agente, un `<dir-ssh>/id_ed25519` con passphrase y un
 `<dir-ssh>/id_ecdsa` sin passphrase y autorizado,
@@ -647,12 +693,40 @@ un `<dir-ssh>/id_ecdsa` autorizado,
 **Entonces** el hijo no pide la passphrase, saltea `id_ed25519` y se autentica con
 `id_ecdsa`.
 
-> **VC-33** — `$T/.ssh` con `id_ed25519` = `K_pass` e `id_ecdsa` = `K_ec`;
+> **VC-33a** — `$T/.ssh` con `id_ed25519` = `K_pass` e `id_ecdsa` = `K_ec`;
 > `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; la prueba de remoto muestra
 > `R=127.0.0.1 ` sin que se haya enviado ninguna tecla al pane antes;
 > `tm capture-pane -p -S - -t %1 | grep -ci passphrase` es `0`; y
 > `/var/log/sshd-vc.log` contiene `Accepted publickey for tester` con la huella de
 > `K_ec`.
+
+#### FR-33b · Saltear una clave ilegible sin avisar
+
+**Dado** un entorno sin agente, un `<dir-ssh>/id_ed25519` que el proceso no puede leer y
+un `<dir-ssh>/id_ecdsa` sin passphrase y autorizado,
+**Cuando** la persona ejecuta `ssh-pane`,
+**Entonces** el hijo saltea `id_ed25519` sin escribir nada en el pane y se autentica
+con `id_ecdsa`.
+
+> **VC-33b** — `$T/.ssh` con `id_ed25519` = `K_ed` con permisos `0000` e
+> `id_ecdsa` = `K_ec`; `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; la prueba de remoto
+> muestra `R=127.0.0.1 `; `tm capture-pane -p -S - -t %1 | grep -c '^ssh-pane: '` es
+> `0`; y `/var/log/sshd-vc.log` contiene `Accepted publickey for tester` con la huella
+> de `K_ec`.
+
+#### FR-33c · Saltear una clave con contenido inválido sin avisar
+
+**Dado** un entorno sin agente, un `<dir-ssh>/id_ed25519` que no es una clave privada
+válida y un `<dir-ssh>/id_ecdsa` sin passphrase y autorizado,
+**Cuando** la persona ejecuta `ssh-pane`,
+**Entonces** el hijo saltea `id_ed25519` sin escribir nada en el pane y se autentica
+con `id_ecdsa`.
+
+> **VC-33c** — `$T/.ssh` con `id_ed25519` = el texto `not a key` (permisos `0600`) e
+> `id_ecdsa` = `K_ec`; `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; la prueba de
+> remoto muestra `R=127.0.0.1 `; `tm capture-pane -p -S - -t %1 | grep -c '^ssh-pane: '`
+> es `0`; y `/var/log/sshd-vc.log` contiene `Accepted publickey for tester` con la
+> huella de `K_ec`.
 
 #### FR-34 · Fallar si no hay ninguna identidad aceptada
 
@@ -771,16 +845,32 @@ pane nuevo existe y está vivo.
 > **VC-44** — `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; prueba de remoto; remoto
 > `exit 0`; en menos de 5 s, `tm list-panes -F '#{pane_id}'` imprime solo `%0`.
 
-#### FR-45 · Informar una conexión perdida
+#### FR-45a · Informar una conexión perdida
 
 **Dado** un pane SSH con la shell remota abierta,
-**Cuando** la conexión se corta sin que la shell remota informe un código de salida,
+**Cuando** la conexión se corta sin que el servidor informe cómo terminó la shell
+remota (ni código de salida ni señal),
 **Entonces** el hijo escribe `ssh-pane: <host>:<port>: connection lost` en el pane y
 termina según BR-5.
 
-> **VC-45** — Con remain-on-exit, `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; prueba
+> **VC-45a** — Con remain-on-exit, `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; prueba
 > de remoto; `pkill -KILL -f '^sshd: tester'` (mata los procesos de `sshd` de esa
 > sesión); esperar `ssh-pane: 127.0.0.1:2222: connection lost`; el estado del pane es
+> `1 255`.
+
+#### FR-45b · Informar una shell remota terminada por una señal
+
+**Dado** un pane SSH con la shell remota abierta,
+**Cuando** la shell remota termina por una señal y el servidor lo informa
+(`exit-signal`) sin un código de salida,
+**Entonces** el hijo escribe
+`ssh-pane: <host>:<port>: remote shell killed by signal <SEÑAL>` en el pane, con el
+nombre de la señal sin el prefijo `SIG` tal como lo informa el servidor, y termina
+según BR-5.
+
+> **VC-45b** — Con remain-on-exit, `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; prueba
+> de remoto; remoto `kill -KILL $$`; esperar
+> `ssh-pane: 127.0.0.1:2222: remote shell killed by signal KILL`; el estado del pane es
 > `1 255`.
 
 #### FR-46a · Cerrar la conexión al matar el pane
@@ -928,10 +1018,10 @@ conexión se haya establecido (hallazgo 2).
 > **VC-51a** — Con el hook de `@pc`, `tm ssh-pane -t %0 127.0.0.1`; en menos de 5 s,
 > `tm show -gv @pc` imprime `%1:ssh-pane -p 22 tester@127.0.0.1:0:0`.
 
-#### FR-51b · Informar el mismo destino en `pane-created` al reconectar
+#### FR-51b · Informar el mismo destino en `pane-created` al reconectar con `respawn-pane -k`
 
 **Dado** un hook `pane-created` y un pane SSH con la shell remota abierta,
-**Cuando** un respawn lo reconecta (FR-49a, FR-49b, FR-49e),
+**Cuando** la persona ejecuta `respawn-pane -k` sin comando sobre él (FR-49a),
 **Entonces** el hook recibe el mismo `pane_command` que al crearlo, con
 `created_respawn` = `1` (`spawn.c:105-108`).
 
@@ -939,14 +1029,25 @@ conexión se haya establecido (hallazgo 2).
 > `tm respawn-pane -k -t %1`; en menos de 5 s, `tm show -gv @pc` imprime
 > `%1:ssh-pane -p 22 tester@127.0.0.1:0:1`.
 
-#### FR-52 · Informar `tmux` como comando actual
+#### FR-52a · Informar `tmux` como comando actual
 
 **Dado** un pane SSH con la shell remota abierta,
 **Cuando** se expande `pane_current_command`,
 **Entonces** el valor es `tmux`, el nombre del proceso local del pane (D-14).
 
-> **VC-52** — Con el escenario de VC-6, `tm display -p -t %1 '#{pane_current_command}'`
+> **VC-52a** — Con el escenario de VC-6, `tm display -p -t %1 '#{pane_current_command}'`
 > imprime `tmux`.
+
+#### FR-52b · Informar un comando de inicio vacío
+
+**Dado** un pane creado con `ssh-pane`,
+**Cuando** se expande `pane_start_command`,
+**Entonces** el valor es la cadena vacía, porque el pane no guarda argumentos
+(`wp->argv` vacío, D-13; `format.c:896-906`, `cmd.c:370-371`), igual que un pane creado
+sin comando.
+
+> **VC-52b** — Con el escenario de VC-6,
+> `tm display -p -t %1 'S=[#{pane_start_command}]'` imprime `S=[]`.
 
 #### FR-53 · Informar el directorio local como directorio actual
 
@@ -1057,14 +1158,14 @@ El comando nunca crea, modifica ni borra `<dir-ssh>/known_hosts`.
 *Fundamento:* aceptar una clave es una decisión de la persona, no del comando (D-8).
 *Excepciones:* ninguna.
 
-> **VC-BR-4** — En VC-6, VC-23, VC-25, VC-26 y VC-27, `sha256sum` y `stat -c %Y` de
+> **VC-BR-4** — En VC-6, VC-23, VC-25a, VC-25b, VC-26 y VC-27, `sha256sum` y `stat -c %Y` de
 > `$T/.ssh/known_hosts` son iguales antes y después; en VC-24 el archivo no existe
 > después.
 
 ### BR-5 · Cómo termina el hijo ante una falla
 
-Toda falla de conexión, de verificación del host o de autenticación, y toda pérdida de
-la conexión, termina así: el hijo escribe una sola línea que empieza con `ssh-pane: `
+Toda falla de conexión, de verificación del host o de autenticación, toda pérdida de
+la conexión y toda shell remota terminada por una señal (FR-45b) terminan así: el hijo escribe una sola línea que empieza con `ssh-pane: `
 en el PTY y sale con código `255`. Después, el pane sigue `remain-on-exit` como
 cualquier otro (`server-fn.c:354-435`). El comando `ssh-pane` ya había terminado con
 éxito (FR-42).
@@ -1074,8 +1175,8 @@ que usa `ssh`, así que un script distingue una falla de la conexión de una sal
 normal de la shell remota (FR-43).
 *Excepciones:* ninguna.
 
-> **VC-BR-5** — En VC-23, VC-24, VC-25, VC-26, VC-28, VC-34, VC-45, VC-47, VC-48a y
-> VC-48b, el estado del pane es `1 255` y `tm capture-pane -p -t %1` tiene exactamente
+> **VC-BR-5** — En VC-23, VC-24, VC-25a, VC-25b, VC-26, VC-28, VC-34, VC-45a, VC-45b,
+> VC-47, VC-48a y VC-48b, el estado del pane es `1 255` y `tm capture-pane -p -t %1` tiene exactamente
 > una línea que empieza con `ssh-pane: `. Sin remain-on-exit, el mismo escenario de
 > VC-48a deja solo `%0` en `tm list-panes -F '#{pane_id}'` en menos de 5 s.
 
@@ -1233,16 +1334,19 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-14 | D-7 | VC-14 | feliz |
 | FR-15 | D-7 | VC-15 | falla |
 | FR-16 | D-7 | VC-16 | falla (sin valor) |
-| FR-17 | D-7 | VC-17 | falla |
+| FR-17a | D-7 | VC-17a | falla |
+| FR-17b | D-7 | VC-17b | borde (IPv6) |
 | FR-18a | D-7 | VC-18a | falla |
 | FR-18b | D-7 | VC-18b | falla |
 | FR-19 | D-7 | VC-19 | falla |
 | FR-20 | Hallazgo 1 | VC-20 | falla |
-| FR-21 | Hallazgo 1 | VC-21 | falla |
+| FR-21a | Hallazgo 1 | VC-21a | falla |
+| FR-21b | D-7 + revisión (objetivo flotante) | VC-21b | borde (flotante) |
 | FR-22 | D-7 | VC-22 | falla |
 | FR-23 | D-8 | VC-23 | falla (host desconocido) |
 | FR-24 | D-8 | VC-24 | borde (sin archivo) |
-| FR-25 | D-8 | VC-25 | falla (clave cambiada) |
+| FR-25a | D-8 | VC-25a | falla (clave cambiada) |
+| FR-25b | D-8 | VC-25b | borde (otro tipo de clave) |
 | FR-26 | D-8 | VC-26 | borde (puerto) |
 | FR-27 | D-8 | VC-27 | borde (hasheado) |
 | FR-28 | D-8 | VC-28 | borde (archivo global) |
@@ -1251,7 +1355,9 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-31 | D-9 | VC-31 | borde (orden) |
 | FR-32a | D-9 | VC-32a | borde (orden) |
 | FR-32b | D-9 | VC-32b | borde (clave rechazada) |
-| FR-33 | D-9 | VC-33 | borde (passphrase) |
+| FR-33a | D-9 | VC-33a | borde (passphrase) |
+| FR-33b | D-9 | VC-33b | borde (clave ilegible) |
+| FR-33c | D-9 | VC-33c | borde (clave inválida) |
 | FR-34 | D-9 | VC-34 | falla |
 | FR-35 | D-9 | VC-35 | borde (agente caído) |
 | FR-36 | D-11 | VC-36 | feliz |
@@ -1263,7 +1369,8 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-42 | D-12 + hallazgo 3 | VC-42 | invariante |
 | FR-43 | D-12 + hallazgo 4 | VC-43 | feliz |
 | FR-44 | D-12 + hallazgo 4 | VC-44 | feliz |
-| FR-45 | D-12 | VC-45 | falla parcial |
+| FR-45a | D-12 | VC-45a | falla parcial |
+| FR-45b | D-12 | VC-45b | borde (señal remota) |
 | FR-46a | D-12 + hallazgo 4 | VC-46a | borde (cierre) |
 | FR-46b | D-1 + riesgo "hijo sin `exec`" | VC-46b | borde (cierre del servidor) |
 | FR-47 | D-12 | VC-47 | falla (timeout) |
@@ -1277,7 +1384,8 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-50 | D-1 | VC-50 | borde (mover) |
 | FR-51a | D-13 + hallazgo 2 | VC-51a | feliz |
 | FR-51b | D-13 + hallazgo 2 | VC-51b | borde (respawn) |
-| FR-52 | D-14 + hallazgo 8 | VC-52 | borde |
+| FR-52a | D-14 + hallazgo 8 | VC-52a | borde |
+| FR-52b | D-13, D-14 + hallazgo 2 | VC-52b | borde |
 | FR-53 | D-14 + hallazgo 8 | VC-53 | borde |
 | FR-54 | D-7 + hallazgo 1 | VC-54 | borde |
 | FR-55 | D-7 + hallazgo 1 | VC-55 | borde (hook) |
@@ -1299,7 +1407,7 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | NFR-1 | Hallazgo 3 + D-1 | VC-NFR-1 | medición |
 | NFR-2 | D-12 | VC-NFR-2 | medición |
 
-**82 requerimientos (65 FR, 6 BR, 9 INV, 2 NFR), 82 VCs, 0 huérfanos.**
+**89 requerimientos (72 FR, 6 BR, 9 INV, 2 NFR), 89 VCs, 0 huérfanos.**
 
 ## Preguntas abiertas
 
@@ -1316,7 +1424,7 @@ corren al cerrar el incremento 1 y de nuevo al cerrar el último.
 | # | Incremento | Depende de | Cierra |
 |---|---|---|---|
 | **1** | Límite de build: `--enable-ssh` en `configure.ac`/`Makefile.am`, entrada `ssh-pane` bajo `#ifdef` que valida argumentos y crea el pane con un hijo que por ahora sale con `255` y un mensaje fijo | — | VC-1 a VC-5, VC-15 a VC-22, VC-55, VC-INV-1 a VC-INV-3, VC-INV-6 a VC-INV-9 |
-| **2** | En el hijo: conexión, verificación del host, autenticación con las claves por defecto, shell remota y puente de bytes | 1 | VC-6 a VC-14, VC-23 a VC-28, VC-30, VC-32a, VC-32b, VC-33, VC-34, VC-BR-2 a VC-BR-4, VC-INV-4 |
+| **2** | En el hijo: conexión, verificación del host, autenticación con las claves por defecto, shell remota y puente de bytes | 1 | VC-6 a VC-14, VC-23 a VC-28, VC-30, VC-32a, VC-32b, VC-33a a VC-33c, VC-34, VC-BR-2 a VC-BR-4, VC-INV-4 |
 | **3** | Agente y detalle de la sesión remota: `TERM`, tamaño inicial, resize, modo crudo, nada de reenvíos | 2 | VC-29, VC-31, VC-35 a VC-41, VC-BR-1 (usa el escenario de VC-31) |
 | **4** | Ciclo de vida y fallas: plazo de 30 s, pérdida de conexión, `kill-pane`, `kill-server`, respawn, `break-pane` | 3 | VC-42 a VC-50, VC-BR-5, VC-NFR-1, VC-NFR-2 |
 | **5** | Eventos, formatos y documentación en `tmux.1` | 4 | VC-51a a VC-54, VC-INV-5 (suite completa final) |
