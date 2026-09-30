@@ -6,6 +6,8 @@
 > Base: `tmux/` en el commit `94796f6b1182507efac8a272fc309a79e22e58a5`
 > (`git checkout 94796f6` antes de verificar).
 > Todas las referencias `archivo:línea` apuntan a ese checkout y son relativas a `tmux/`.
+> Fuera del repo se consultaron (2026-09-30, con `gh`) los issues y PRs de
+> `tmux/tmux` y el repo `tmux/tmux-builds`; esas referencias se marcan como links.
 
 ## Qué buscamos
 
@@ -101,9 +103,16 @@ trabajo que bloquee dentro del servidor (resolver DNS, conectar, negociar la
 clave, autenticar) congela a todos los clientes y panes a la vez.
 
 **Precedente de fd que no es PTY.** `job.c` ya integra procesos auxiliares al
-mismo loop sin PTY: `job_run` (`job.c:72`) crea un `socketpair`
-(`job.c:118`) y lo envuelve en un `bufferevent` (`job.c:225`). Es el patrón a
-mirar si la spec evalúa alojar un socket en el servidor en vez de un pane con PTY.
+mismo loop: `job_run` (`job.c:72`) usa `fdforkpty` si recibe `JOB_PTY`
+(`job.c:112-116`) y, si no, crea un `socketpair` (`job.c:118`); en ambos casos
+envuelve el fd en un `bufferevent` (`job.c:225`). Es el patrón a mirar si la
+spec evalúa alojar un socket en el servidor en vez de un pane con PTY.
+
+**En Linux el loop usa `poll`, no `epoll`.** `osdep_event_init` fija
+`EVENT_NOEPOLL` antes de `event_init` porque epoll no funciona sobre
+`/dev/null`, y después lo borra del entorno para que no lo hereden los hijos
+(`osdep-linux.c:92-102`; commits `3ed5e56a` y `50e3e3e7`). Cualquier fd que se
+registre en el servidor queda bajo ese backend.
 
 ### 4. Resize y cierre también dependen del proceso hijo
 
@@ -138,7 +147,10 @@ mantenimiento.
 define la condición de Automake `IS_LINUX`.
 `Makefile.am:90-91,235-255` lista fuentes comunes, elige `osdep-@PLATFORM@.c`
 y muestra otros casos de fuentes condicionales. El patrón de detección y
-enlace de una biblioteca está en `configure.ac:250-303` (libevent).
+enlace de una biblioteca está en `configure.ac:250-303` (libevent). Al final,
+`configure` imprime un resumen de lo que encontró (ASAN, SIXEL, jemalloc,
+libevent, systemd, utf8proc…; `configure.ac:1144-1167`; commits `60492981` y
+`d6c37ce3`); un feature SSH también debería aparecer ahí.
 
 `IS_LINUX` sirve para condicionar reglas de Automake; no es por sí sola una
 macro disponible en C. `cmd.c` tiene las declaraciones `extern` de las
@@ -160,9 +172,9 @@ build de macOS de la línea de base se enlaza `compat/fdforkpty.o`).
 selecciona ese archivo en `Makefile.am:235`. Ninguno de esos dos mecanismos
 constituye por sí mismo un cliente SSH.
 
-### 7. Hay precedentes de código condicional, pero ninguno por plataforma
+### 7. Hay precedentes de código condicional, pero ningún feature por plataforma
 
-Tres patrones del repo sirven de molde para el límite solo-Linux:
+Cuatro patrones del repo sirven de molde para el límite solo-Linux:
 
 - **Feature opcional con fuentes propias — sixel.** `configure.ac:545-552`
   declara `--enable-sixel`, hace `AC_DEFINE(ENABLE_SIXEL)` y
@@ -176,22 +188,32 @@ Tres patrones del repo sirven de molde para el límite solo-Linux:
   (`AC_DEFINE` + `AM_CONDITIONAL` + `compat/systemd.c`).
 - **Alternativa en el servidor.** `server.c:223-227` elige entre
   `systemd_create_socket` y `server_create_socket` con `#ifdef HAVE_SYSTEMD`.
+- **Un chequeo solo-Linux ya existente — `vlock`.** `configure.ac:1133-1142`
+  hace `if test "x$PLATFORM" = xlinux` y, si encuentra `vlock`, lo usa como
+  `lock-command` por defecto (commit `0ff991b2`, 2023). El valor llega a C por
+  `Makefile.am:15` (`-DTMUX_LOCK_CMD='"@DEFAULT_LOCK_CMD@"'`), `tmux.h:103-104`
+  (`#ifndef TMUX_LOCK_CMD`) y `options-table.c:890`. Es el único precedente
+  de "decidir según `PLATFORM` y pasarlo a C", y está ubicado después del
+  `case` de plataforma.
 
-**Lo que no existe:** ningún feature queda restringido a una sola plataforma.
-sixel, systemd y cgroups dependen de `--enable-X` y de que la biblioteca
-aparezca, no de `PLATFORM`. La plataforma sí cambia algunos defaults: en darwin,
-utf8proc pasa a ser obligatorio salvo `--disable-utf8proc`
-(`configure.ac:452-457`), y jemalloc sigue el mismo esquema
-(`configure.ac:655`). Aun así, los dos se pueden compilar en cualquier
-plataforma. Además, `IS_LINUX` está definido pero **no se usa** en ningún lugar
-de `Makefile.am`. Una guarda que excluya un feature fuera de Linux sería nueva.
+**Lo que no existe:** ningún *feature* queda restringido a una sola plataforma;
+`vlock` solo cambia un default. sixel, systemd y cgroups dependen de
+`--enable-X` y de que la biblioteca aparezca, no de `PLATFORM`. La plataforma
+también cambia otros defaults: en darwin, utf8proc pasa a ser obligatorio salvo
+`--disable-utf8proc` (`configure.ac:452-457`), y jemalloc sigue el mismo
+esquema (`configure.ac:655`); los dos se pueden compilar en cualquier
+plataforma. En `Makefile.am:42-87` hay `if IS_DARWIN`, `IS_SUNOS`, `IS_AIX`,
+`IS_NETBSD`, `IS_HAIKU` e `IS_CYGWIN`, pero solo para flags de compilación;
+`IS_LINUX` está definido y **no se usa**. Condicionar *fuentes* o un feature a
+Linux sería nuevo.
 
 **Trampa de orden en `configure`.** `PLATFORM` se calcula al final, en el
 `case "$host_os"` de `configure.ac:1008-1118`, después de todos los chequeos
 de bibliotecas (libevent en 250, systemd en 500, sixel en 545). Un chequeo de
-libssh condicionado a Linux tiene que ir después de la línea 1118, o hacer su
-propio `case "$host_os"` como ya hacen `configure.ac:89,452,655`. Ese mismo
-`case` final ya contiene lógica por plataforma que corta el build: en darwin
+libssh condicionado a Linux tiene que ir después de la línea 1118, como el de
+`vlock` (`configure.ac:1133`), o hacer su propio `case "$host_os"` como ya
+hacen `configure.ac:89,452,655`. Ese mismo `case` final ya contiene lógica
+por plataforma que corta el build: en darwin
 exige elegir `--enable/--disable-utf8proc` y `--enable/--disable-jemalloc`
 (`configure.ac:1014-1056`).
 
@@ -205,20 +227,150 @@ SSH, esos formatos pueden mostrar el proceso y directorio **locales** en vez
 del comando o directorio remotos. La spec debe decidir qué se promete al
 usuario para un pane SSH.
 
-### 9. `libssh` u OpenSSH: contexto fuera del repo
+### 9. Contexto fuera del repo: biblioteca SSH y postura de upstream
 
 Esto no sale del código de tmux; queda anotado para la decisión de la spec.
+
+**`libssh` u OpenSSH.**
 
 - **OpenSSH no expone una biblioteca de cliente.** "Usar OpenSSH" en la
   práctica es ejecutar el binario `ssh`, que es justo lo que el pedido excluye.
 - **`libssh`** (LGPL-2.1) y **`libssh2`** (BSD) son bibliotecas de cliente.
-  tmux usa la licencia ISC (`COPYING`); enlazar dinámicamente una biblioteca
-  LGPL no cambia eso, pero la spec debería nombrar la licencia de la elegida.
+  tmux usa la licencia ISC (`COPYING`). Enlazar dinámicamente una LGPL no
+  cambia eso, pero el binario Linux oficial se enlaza **estático** (hallazgo
+  11), y con LGPL-2.1 eso obliga a permitir el re-enlazado. La spec debería
+  nombrar la licencia de la elegida y decir qué pasa con `--enable-static`.
 - Cualquiera de las dos tendría que detectarse como libevent, con
   `PKG_CHECK_MODULES` (`configure.ac:250-303`).
 - Si la biblioteca corre en el servidor, necesita un modo no bloqueante y un
   fd que se pueda registrar en libevent (hallazgo 3). Si corre en un hijo, esa
   restricción desaparece, pero aparece la del riesgo "hijo sin `exec`".
+
+**Qué dijo upstream.** En los issues y PRs de `tmux/tmux` no aparece ninguna
+propuesta de cliente SSH integrado (búsquedas: "libssh", "native ssh",
+"built-in ssh", "builtin ssh", "remote pane", "remote sessions",
+"ssh integration"). El mantenedor sí fijó una dirección para sesiones
+remotas, dos veces:
+
+- [#1643](https://github.com/tmux/tmux/issues/1643) (2019): prefiere que un
+  servidor hable con otro por *control mode*, "because control mode is a text
+  protocol, it can be tunnelled with ssh and tmux doesn't have to worry about
+  networking or encryption".
+- [#5566](https://github.com/tmux/tmux/issues/5566) (2026-09): "The way to do
+  this is to connect to the remote servers with control mode and add a concept
+  of either a remote session (easiest), window or pane". Lo sumó a su lista de
+  pendientes.
+
+Es coherente con el código: el `pledge` del servidor no incluye `inet` ni `dns`
+(`tmux.c:540-542`), así que en OpenBSD el servidor no puede abrir conexiones
+de red. En sentido inverso, [#5075](https://github.com/tmux/tmux/issues/5075)
+usa tmux como frontera para que agentes operen shells remotas sin recibir
+credenciales: la autenticación la hace una persona dentro del pane.
+
+**Consecuencia:** el cliente SSH nativo va contra la dirección que declaró
+upstream. Hay que tratarlo como un feature de portable o de un fork, no
+suponer que entraría a tmux.
+
+### 10. tmux portable depende del árbol de OpenBSD
+
+`SYNCING.md` describe dos repositorios: el código de tmux se escribe en
+OpenBSD (`usr.bin/tmux/`), pasa por `tmux-openbsd-cutover` y se mergea en
+portable. El commit base es uno de esos merges: su segundo padre (`HEAD^2`) es
+el árbol OpenBSD.
+
+- **Quién es dueño de qué.** El árbol OpenBSD tiene 146 archivos; portable,
+  179. Solo portable tiene `configure.ac`, `Makefile.am`, `compat/`,
+  `osdep-*.c` y `regress/`; solo OpenBSD tiene su `Makefile` y `procname.c`.
+- **Cuánto difieren los archivos compartidos** (`git diff HEAD^2 HEAD`):
+  `cmd.c` y `cmd-split-window.c` solo quitan `#include <paths.h>`; **hoy no
+  tienen ninguna lógica propia de portable.** `spawn.c` tiene 25 líneas propias
+  (cgroups, `IUTF8` y utempter en `spawn.c:504-513,533-535,578-585`);
+  `tmux.h`, 79; `server.c`, 9; `environ.c`, 5.
+- **Esas líneas ya se perdieron una vez.** En `5ece386c` (2019-04-07) OpenBSD
+  separó la creación de panes en `spawn.c`; el bloque utempter de portable no
+  sobrevivió al merge y volvió en `54efe337` (2019-12-18, "Add back utempter
+  code, reported by…"). Estuvo ocho meses fuera sin que nada fallara.
+- **Hay trabajo en curso sobre la misma superficie.** El PR abierto
+  [#5657](https://github.com/tmux/tmux/pull/5657) (2026-09-29, utmp
+  configurable en runtime) toca `spawn.c`, `server-fn.c`, `window.c`, `tmux.h`
+  y `options-table.c`. Las líneas citadas acá pueden correrse.
+
+Cualquier `#if` que el cambio agregue en `cmd.c`, `spawn.c` o `tmux.h` es
+código propio de portable dentro de un archivo de OpenBSD: se arrastra en cada
+merge y un refactor de upstream puede borrarlo en silencio.
+
+### 11. Qué verifica hoy la CI
+
+- **La única CI activa es GitHub Actions** (`gh api
+  repos/tmux/tmux/actions/workflows`: `regress.yml` y `lock.yml`).
+  `regress.yml` corre de noche y a mano, **no en cada PR**
+  (`.github/workflows/regress.yml:3-6`), y **solo en `tmux/tmux`**
+  (`regress.yml:19`): en un fork no se ejecuta.
+- **Plataformas:** ubuntu-24.04 x64, ubuntu-24.04 arm64 (agregada el
+  2026-09-21, `c3326194`) y macos-26 arm64, todas con
+  `--enable-utf8proc --enable-asan` (`regress.yml:26-37`). En macOS usa `gmake`
+  (`regress.yml:36`). **FreeBSD no está.**
+- **`.travis.yml` parece abandonado.** Es el único lugar con FreeBSD, musl y
+  static (`.travis.yml:1-24`; `.github/travis/build.sh`), pero no cambia desde
+  2020-05-19 y sus scripts, desde 2021. No se pudo confirmar si todavía corre.
+- **Hay un build Linux estático oficial.** El repo
+  [`tmux/tmux-builds`](https://github.com/tmux/tmux-builds) publica cada noche,
+  desde master, binarios **estáticos con musl** para Linux x86_64/arm64 (y
+  macOS). Configura con `--enable-static --enable-utf8proc --disable-jemalloc`
+  (`scripts/build_tmux.sh`) y junta las licencias de cada biblioteca enlazada
+  (`scripts/collect_licenses.sh`).
+
+Para el invariante "no-Linux sigue compilando", la CI de upstream solo cubre
+macOS, y no la corre ni en PRs ni en forks. Del lado Linux, un `configure` que
+exija libssh o la detecte sola afecta también al build estático oficial.
+
+### 12. El nombre del comando es una interfaz
+
+`tmux.1:9238` documenta que "the shortest unambiguous form of a command is
+accepted". `cmd_find` (`cmd.c:460-492`) compara primero con el alias exacto y
+después por prefijo. `command-alias` (`options-table.c:319`; resuelto por
+`cmd_get_alias`, `cmd.c:431`, desde `cmd-parse.y:788`) solo compara nombres
+exactos y no agrega ambigüedad. **Ningún test protege las abreviaturas de los
+comandos existentes:** `regress/list-commands.sh` solo verifica que `list` sea
+ambiguo.
+
+Simulando `cmd_find` sobre los 92 comandos de la tabla, esto es cuántas
+abreviaturas que hoy funcionan quedarían ambiguas **solo en Linux** según el
+nombre elegido:
+
+| Nombre candidato | Abreviaturas que rompe |
+|---|---|
+| `ssh`, `ssh-pane`, `ssh-window`, `open-ssh`, `remote-pane` | 0 |
+| `new-ssh`, `new-ssh-pane` | 1 (`new-s`, hoy `new-session`) |
+| `connect-pane` | 1 (`con`) |
+| `new-pane-ssh` | 3 (`new-p`, `new-pa`, `new-pan`) |
+| `split-ssh` | 5 (`sp`, `spl`, `spli`, `split`, `split-`) |
+| `split-window-ssh` | 10 |
+
+Además, si en no-Linux el comando no existe, un `.tmux.conf` que lo use falla
+con `unknown command` (`cmd.c:488-489`) al cargarse en esa plataforma.
+
+## Historia de compat y build
+
+| Año | Commit | Qué pasó |
+|---|---|---|
+| 2007 | `08d9f46a` | "Make it build/run on Linux": nace `compat/`. tmux nació en OpenBSD y Linux fue un puerto. |
+| 2009 | `2d15f598` | Aparece `osdep-*.c`, para una sola función (el nombre del proceso para `automatic-rename`): "can't be done portably… (ugh)". |
+| 2010 | `f71b3054` | Paso a autoconf/automake; nacen `PLATFORM` e `IS_*`. |
+| 2011 | `11dcbd75` | `--enable-static`. |
+| 2013 / 2018 | `3ed5e56a`, `50e3e3e7` | `EVENT_NOEPOLL` en Linux, y se limpia del entorno de los hijos. |
+| 2014 | `4273c1b8` | utempter opcional: primer código propio de portable en el camino de spawn. |
+| 2017 | `94207581` | `getptmfd()` y `fdforkpty()` en `compat/`. |
+| 2019 | `5ece386c` → `54efe337` | OpenBSD crea `spawn.c`; el código utempter de portable se pierde y vuelve ocho meses después. |
+| 2022–2023 | `fc7f1e7a`, `b9524f5b`, `dfbc6b18` | systemd, cgroups y sixel como features opcionales. |
+| 2023 | `0ff991b2` | `vlock` como `lock-command` por defecto, solo en Linux. |
+| 2024 | `3c2621b4` | jemalloc. |
+| 2026 | `2aad2cfc`, `26bdd2b5`, `a10ed323`, `60492981` | Flag de ASan; macOS exige decidir utf8proc y jemalloc; resumen al final de `configure`. |
+
+Tres lecciones para la spec: `osdep` sirve para funciones puntuales por
+plataforma, no para features; los features opcionales entran por
+`--enable-X` + `AC_DEFINE` + `AM_CONDITIONAL`; y el código propio de portable
+dentro de archivos de OpenBSD es frágil ante los refactors de upstream.
 
 ## Una integración posible, todavía sin decidir
 
@@ -253,7 +405,8 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
 | Comando y layout | `cmd.c:30-216`; `cmd-split-window.c:39-76,175-208` | Registro y preparación del pane. |
 | Spawn y estado | `spawn.c:374-613`; `tmux.h:1361-1390,2499-2532` | PTY, hijo y estado. |
 | E/S y cierre | `window.c:1585-1638,2024-2059`; `server.c:466-515`; `server-fn.c:354-435` | Entrada, salida y ciclo de vida. |
-| Límite Linux | `configure.ac:250-303,545-552,1008-1123`; `Makefile.am:235-255` | Detección, compilación y enlace condicional. |
+| Límite Linux | `configure.ac:250-303,545-552,1008-1167`; `Makefile.am:15,235-255` | Detección, compilación, enlace condicional y resumen de `configure`. |
+| Sync y CI | `SYNCING.md`; `.github/workflows/regress.yml`; `.travis.yml` | Qué archivos son de OpenBSD y qué plataformas se verifican. |
 | Documentación y tests | `tmux.1:4086-4105`; `regress/pane-ops.sh`; `regress/hooks-notify.sh:281-302,380-394` | Interfaz, panes y eventos. |
 
 ## Interfaces reusadas
@@ -261,6 +414,7 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
 | Interfaz | Dónde | Contrato que hay que respetar |
 |---|---|---|
 | `struct cmd_entry` + `cmd_table[]` | `tmux.h:2055-2075`; `cmd.c:30-216` | Un comando es un `extern` más un puntero en la tabla; `cmd_find` lo resuelve por nombre (`cmd.c:460-492`). |
+| `cmd_find()` / `command-alias` | `cmd.c:431,460-492`; `options-table.c:319`; `tmux.1:9238` | Un prefijo único resuelve a un comando (contrato documentado); los alias solo por nombre exacto. |
 | `struct spawn_context` + `spawn_pane()` | `tmux.h:2499-2532`; `spawn.c:243` | Devuelve el pane o `NULL` con `cause`. Tiene cinco callers: no puede cambiar para ellos. |
 | `fdforkpty()` | `spawn.c:478`; `compat/fdforkpty.c:23-33` | Crea hijo y PTY; en macOS lo aporta `compat/`. |
 | `environ_for_session()` | `environ.c:251-269` | Entorno del hijo; incluye `update-environment`. |
@@ -270,7 +424,7 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
 | `server_child_signal()` / `server_child_exited()` | `server.c:466-515` | `PANE_EXITED` y `PANE_STATUSREADY` gobiernan el cierre. |
 | `server_destroy_pane()` | `server-fn.c:354-435` | `remain-on-exit` y eventos de salida. |
 | `proc_loop()` | `proc.c:223-227`; `server.c:258` | Un solo loop de libevent, sin hilos. |
-| `job_run()` | `job.c:72,118,225` | Precedente de fd auxiliar (`socketpair`) en el loop. |
+| `job_run()` | `job.c:72,112-118,225` | Precedente de fd auxiliar (PTY o `socketpair`) en el loop. |
 
 ## Riesgos que la spec no debería dejar implícitos
 
@@ -293,17 +447,37 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
   (`spawn.c:74-110,436-445`). El entorno puede heredar
   `SSH_AUTH_SOCK`/`SSH_ASKPASS` según `update-environment` (`environ.c:251-269`;
   `options-table.c:1207-1216`), pero eso no establece una política SSH.
-- **Un runner que no corre nada:** `regress/Makefile:1` usa `TESTS!= echo *.sh`,
-  sintaxis que GNU make 3.81 (el de macOS) no entiende. `make -C regress` expande
-  la lista vacía y termina sin error y sin correr ningún test. Verde no significa
-  correcto (ver línea de base).
+- **Un runner que no corre nada (local, en macOS):** `regress/Makefile:1` usa
+  `TESTS!= echo *.sh`, sintaxis que GNU make 3.81 (el de macOS) no entiende.
+  `make -C regress` expande la lista vacía y termina sin error y sin correr
+  ningún test. La CI no lo sufre porque usa `gmake` (`regress.yml:36`); quien
+  verifique a mano en macOS, sí (ver línea de base).
+- **Divergencia con OpenBSD:** código propio de portable dentro de `cmd.c`,
+  `spawn.c` o `tmux.h` se arrastra en cada merge, y un refactor de upstream
+  puede borrarlo sin que falle nada, como pasó con utempter en 2019
+  (hallazgo 10).
+- **Abreviaturas que dejan de funcionar:** un nombre que comparta prefijo con
+  un comando existente cambia el comportamiento de comandos existentes solo en
+  Linux, y ningún test lo detecta (hallazgo 12).
+- **La CI no cubre el cambio:** no corre en PRs ni en forks, y de las
+  plataformas no Linux solo prueba macOS. La comprobación de no-Linux (macOS,
+  y FreeBSD si se exige) la tiene que hacer el equipo (hallazgo 11).
+- **Romper el build estático oficial:** `tmux-builds` compila Linux estático
+  con musl cada noche. Si `configure` exige libssh o la detecta sola, ese
+  build falla o empieza a enlazar libssh estática (con sus obligaciones LGPL)
+  sin que nadie lo decida (hallazgos 9 y 11).
+- **Ir contra la dirección de upstream:** el mantenedor prefiere sesiones
+  remotas por control mode y que tmux no haga red ni cifrado (#1643, #5566).
+  El cambio queda como feature de portable o fork (hallazgo 9).
 
 ## Decisiones pendientes para la spec
 
-1. Nombre, sintaxis y target del comando: ¿split, pane flotante o ambos?
+1. Nombre, sintaxis y target del comando: ¿split, pane flotante o ambos? El
+   nombre no debería volver ambiguas abreviaturas existentes (hallazgo 12).
 2. Biblioteca SSH (hallazgo 9), `--enable-ssh` explícito o detección
    automática, y comportamiento de `configure` si falta en Linux o se pide
-   fuera de Linux.
+   fuera de Linux. Qué pasa con `--enable-static` y el build musl oficial
+   (hallazgo 11).
 3. Verificación del host y autenticación: claves, agente, contraseña y
    mensajes interactivos.
 4. Shell o comando remoto; PTY remoto, `TERM` y resize.
@@ -316,6 +490,13 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
 7. Qué significan `pane-created`, `pane_current_command` y
    `pane_current_path` para un pane SSH (hallazgos 2 y 8).
 8. Dónde corre la biblioteca: hijo con PTY o servidor (hallazgos 3 y 9).
+9. En no-Linux, ¿el comando no existe (un `.tmux.conf` que lo use falla con
+   `unknown command`) o existe y devuelve "no soportado en esta plataforma"?
+   (hallazgo 12).
+10. Cuánto del cambio vive en archivos nuevos propios de portable y cuánto en
+    cambios dentro de `cmd.c`, `spawn.c` o `tmux.h` (hallazgo 10).
+11. Si la spec menciona control mode (#5566) como alternativa descartada, y
+    por qué (hallazgo 9).
 
 ## Línea de base
 
@@ -355,9 +536,16 @@ make
 ### Linux — pendiente
 
 No medida todavía: el daemon de Docker no estaba disponible en la máquina de
-exploración. Hay que repetir los mismos pasos en una distro con `libevent-dev`,
-`libncurses-dev`, `bison`, autotools y `pkg-config`, y registrar build y suite
-**antes** de tocar nada. Es el lado donde se enlazará el feature.
+exploración. La receta a replicar es la de la CI de upstream
+(`.github/workflows/regress.yml:45-57,73-82`): ubuntu-24.04 con `autoconf`,
+`automake`, `bison`, `build-essential`, `libevent-dev`, `libncurses-dev`,
+`libutf8proc-dev` y `pkg-config`; luego `sh autogen.sh`,
+`./configure --enable-utf8proc --enable-asan`, `make` y `make` dentro de
+`regress/`. Hay que registrar build y suite **antes** de tocar nada. Es el
+lado donde se enlazará el feature. Conviene medir también un build
+`--enable-static`, porque es el que publica `tmux-builds` (hallazgo 11).
+
+La línea de base de macOS se midió sin `--enable-asan`, a diferencia de la CI.
 
 No se identificó una prueba de cliente SSH nativo en `regress/`; la spec
 debería prever una prueba con servidor SSH controlado en Linux y una
