@@ -511,6 +511,17 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
 11. Si la spec menciona control mode (#5566) como alternativa descartada, y
     por qué (hallazgo 9).
 
+## Lo que no hace falta entender
+
+El parser de secuencias de escape (`input.c`, salvo su entrada desde el PTY), la
+codificación de teclas (`input-keys.c`), el render de pantalla (`screen*.c`,
+`tty*.c`), el algoritmo de layout (`layout*.c`: se reusa tal como lo usa
+`split-window`), copy mode, popups y menús, el control mode, y el resto de los ~90
+comandos. Tampoco las capas `compat/` y `osdep-*` más allá de lo que dicen los
+hallazgos 6 y 7: el cambio no las toca.
+
+Acotar también es decidir qué no leer.
+
 ## Línea de base
 
 El checkout no trae `configure` generado ni binario. Para construir desde Git,

@@ -67,11 +67,11 @@ Por path. **Estos archivos no se modifican:**
   `cmd-find.c`, `arguments.c`**: los demás callers de `spawn_pane`, los comandos que
   operan sobre un pane SSH (FR-49e, FR-50) y la infraestructura de parseo, targets y
   layout que `ssh-pane` reusa no cambian.
+- **`.github/workflows/`, `.travis.yml`**: la CI de upstream no se modifica (INV-1 a
+  INV-3 se verifican a mano).
 
 Regla general: **solo cambian los archivos de la tabla "Dentro"** (INV-9). Cualquier
 otro archivo modificado es una violación del alcance, aunque los tests pasen.
-- **`.github/workflows/`, `.travis.yml`**: la CI de upstream no se modifica (INV-1 a
-  INV-3 se verifican a mano).
 
 Por funcionalidad. Cada ítem es una decisión tomada, no un olvido:
 
@@ -202,6 +202,17 @@ Los VCs corren contra estos entornos. Construirlos es parte del plan, no de la s
   - *Error del comando*: `tm ssh-pane …` sale con código `1`, su stderr es exactamente
     el mensaje indicado, y después `tm list-panes | wc -l` sigue siendo `1`.
   - *Huella de `K_x`*: `ssh-keygen -lf K_x.pub | cut -d' ' -f2`.
+  - *`SSH_AUTH_SOCK` va en la sesión, no en el global.* `SSH_AUTH_SOCK` está en
+    `update-environment` (`options-table.c:1207-1216`). Como `tm new -d` corre sin esa
+    variable, `environ_update` la deja **borrada** en el entorno de la sesión
+    (`environ.c:208-209`), y al armar el entorno del hijo ese borrado pisa el valor
+    global (`environ.c:86-98,260-262`). Por eso los VCs usan
+    `tm set-environment SSH_AUTH_SOCK …` (sin `-g`: sesión actual). Con `-g`, el pane
+    nunca vería el agente.
+  - *Comandos sin servidor.* El cliente descarta sus propios errores de parseo
+    (`client.c:263-270`); si ningún servidor corre y el comando no tiene
+    `CMD_STARTSERVER`, el error es `no server running on …` (`client.c:292`). Los VCs que
+    esperan un error de parseo corren contra un servidor ya arrancado con `tm new -d`.
 - **Hosts no Linux.** macOS 26 arm64 con las dependencias de la línea de base, y una VM
   FreeBSD (versión a fijar al medir su línea de base), ambos con `libssh` ≥ 0.10
   instalada (Homebrew y `pkg`), para mostrar que la plataforma, y no la ausencia de la
@@ -574,7 +585,7 @@ identidad autorizada, y ninguna clave en `<dir-ssh>`,
 
 > **VC-29** — `$T/.ssh` sin `id_*`; `ssh-agent -a $T/agent.sock` y
 > `SSH_AUTH_SOCK=$T/agent.sock ssh-add K_agent`;
-> `tm set-environment -g SSH_AUTH_SOCK $T/agent.sock`;
+> `tm set-environment SSH_AUTH_SOCK $T/agent.sock`;
 > `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; la prueba de remoto muestra
 > `R=127.0.0.1 `, y `/var/log/sshd-vc.log` contiene `Accepted publickey for tester` con
 > la huella de `K_agent`.
@@ -664,7 +675,7 @@ un `<dir-ssh>/id_ed25519` autorizado,
 **Entonces** el hijo saltea el agente sin avisar y se autentica con la clave.
 
 > **VC-35** — Con la configuración estándar de `$T/.ssh`,
-> `tm set-environment -g SSH_AUTH_SOCK $T/no-such.sock`;
+> `tm set-environment SSH_AUTH_SOCK $T/no-such.sock`;
 > `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; la prueba de remoto muestra
 > `R=127.0.0.1 `, y `/var/log/sshd-vc.log` contiene la huella de `K_ed`.
 
@@ -772,17 +783,32 @@ termina según BR-5.
 > sesión); esperar `ssh-pane: 127.0.0.1:2222: connection lost`; el estado del pane es
 > `1 255`.
 
-#### FR-46 · Cerrar la conexión al matar el pane
+#### FR-46a · Cerrar la conexión al matar el pane
 
 **Dado** un pane SSH con la shell remota abierta,
 **Cuando** la persona ejecuta `kill-pane` sobre él,
 **Entonces** el hijo cierra la conexión y termina, y del lado remoto no queda ninguna
 sesión.
 
-> **VC-46** — Con el escenario de VC-6, `tm kill-pane -t %1`; en menos de 5 s,
+> **VC-46a** — Con el escenario de VC-6, `tm kill-pane -t %1`; en menos de 5 s,
 > `ss -Htn state established '( dport = :2222 )' | wc -l` es `0`,
 > `pgrep -f '^sshd: tester'` no imprime nada, y el proceso `pane_pid` leído antes del
 > `kill-pane` ya no existe.
+
+#### FR-46b · Cerrar la conexión al terminar el servidor
+
+**Dado** un pane SSH con la shell remota abierta,
+**Cuando** el servidor tmux termina con `kill-server`,
+**Entonces** el hijo cierra la conexión y termina: no queda ningún proceso del pane ni
+ninguna sesión remota después del servidor.
+
+*Por qué:* el hijo no hace `exec` (D-1). Si ignorara el cierre del PTY, quedaría un
+proceso con red y credenciales vivo sin ningún tmux que lo muestre.
+
+> **VC-46b** — Con el escenario de VC-6, se anota `pane_pid`; `tm kill-server`; en menos
+> de 5 s, el proceso `pane_pid` ya no existe,
+> `ss -Htn state established '( dport = :2222 )' | wc -l` es `0` y
+> `pgrep -f '^sshd: tester'` no imprime nada.
 
 #### FR-47 · Abandonar la conexión a los 30 s
 
@@ -885,21 +911,31 @@ hay conexión SSH.
 
 ### Eventos y formatos
 
-#### FR-51 · Informar el destino en `pane-created`
+En esta sección, *el hook de `@pc`* es:
+`tm set -g @pc 0`;
+`tm set-hook -g pane-created 'set -gF @pc "#{hook_pane}:#{hook_pane_command}:#{hook_created_empty}:#{hook_created_respawn}"'`
+(la misma forma que `regress/hooks-notify.sh:284`). El evento no acredita que la
+conexión se haya establecido (hallazgo 2).
+
+#### FR-51a · Informar el destino en `pane-created` al crear el pane
 
 **Dado** un hook `pane-created`,
 **Cuando** se crea un pane con `ssh-pane`,
 **Entonces** el hook recibe como `pane_command` la forma normalizada
 `ssh-pane -p <port> <user>@<host>`, con el usuario y el puerto ya resueltos, y
-`created_empty` = `0`. Un respawn que reconecta (FR-49a, FR-49b, FR-49e) informa el
-mismo `pane_command`, con `created_respawn` = `1` (`spawn.c:105-108`). El evento no
-acredita que la conexión se haya establecido (hallazgo 2).
+`created_empty` = `0` y `created_respawn` = `0`.
 
-> **VC-51** — `tm set -g @pc 0`;
-> `tm set-hook -g pane-created 'set -gF @pc "#{hook_pane}:#{hook_pane_command}:#{hook_created_empty}:#{hook_created_respawn}"'`
-> (la misma forma que `regress/hooks-notify.sh:284`);
-> `tm ssh-pane -t %0 127.0.0.1`; en menos de 5 s, `tm show -gv @pc` imprime
-> `%1:ssh-pane -p 22 tester@127.0.0.1:0:0`. Después de la prueba de remoto,
+> **VC-51a** — Con el hook de `@pc`, `tm ssh-pane -t %0 127.0.0.1`; en menos de 5 s,
+> `tm show -gv @pc` imprime `%1:ssh-pane -p 22 tester@127.0.0.1:0:0`.
+
+#### FR-51b · Informar el mismo destino en `pane-created` al reconectar
+
+**Dado** un hook `pane-created` y un pane SSH con la shell remota abierta,
+**Cuando** un respawn lo reconecta (FR-49a, FR-49b, FR-49e),
+**Entonces** el hook recibe el mismo `pane_command` que al crearlo, con
+`created_respawn` = `1` (`spawn.c:105-108`).
+
+> **VC-51b** — Después de VC-51a y de la prueba de remoto, `tm set -g @pc 0`;
 > `tm respawn-pane -k -t %1`; en menos de 5 s, `tm show -gv @pc` imprime
 > `%1:ssh-pane -p 22 tester@127.0.0.1:0:1`.
 
@@ -919,9 +955,12 @@ acredita que la conexión se haya establecido (hallazgo 2).
 **Entonces** el valor sigue siendo el directorio local con el que se creó el pane
 (D-14).
 
-> **VC-53** — Con un servidor arrancado con `tm new -d -x 120 -y 40 -c /tmp`,
-> `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; prueba de remoto; remoto `cd /usr`;
-> `tm display -p -t %1 '#{pane_current_path}'` imprime `/tmp`.
+> **VC-53** — `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; prueba de remoto;
+> `p0=$(tm display -p -t %1 '#{pane_current_path}')`, que no es `/usr`; remoto `cd /usr`
+> y `echo "D=$PWD"`; esperar `D=/usr`; `tm display -p -t %1 '#{pane_current_path}'`
+> sigue imprimiendo `$p0`. (No se fija un valor absoluto: si el cliente que manda el
+> comando no tiene sesión, el directorio del pane es el de ese cliente y no el de la
+> sesión, `server-client.c:2932-2933`.)
 
 #### FR-54 · No disparar `after-split-window`
 
@@ -1054,8 +1093,8 @@ FreeBSD ni `--enable-ssh` (hallazgo 11).
 > `sh autogen.sh && ./configure --disable-jemalloc && make`. En las dos, `make` termina
 > sin warnings; en la del cambio, además: la salida de `configure` contiene
 > `configure: libssh: off`, `nm ./tmux | grep -ci ssh` es `0`,
-> `./tmux -L vc -f /dev/null list-commands | wc -l` es `92` y
-> `./tmux -L vc -f /dev/null ssh-pane x` sale con código `1` y stderr
+> `./tmux -L vc -f /dev/null list-commands | wc -l` es `92` y, con un servidor
+> arrancado con `tm new -d`, `tm ssh-pane x` sale con código `1` y stderr
 > `unknown command: ssh-pane`. La suite, con la receta de la línea de base
 > (`SHELL=/bin/sh`), da el **mismo conjunto de tests PASS y FAIL** en las dos copias
 > (los `regress/ssh-pane-*.sh` nuevos se cuentan aparte, por INV-6).
@@ -1075,8 +1114,8 @@ FreeBSD ni `--enable-ssh` (hallazgo 11).
 > **VC-INV-3** — En `L`, con `libssh-dev` instalada,
 > `./configure --enable-utf8proc --enable-asan && make` termina sin warnings; la salida
 > de `configure` contiene `configure: libssh: off`; `ldd ./tmux | grep -c libssh` es
-> `0`; `nm ./tmux | grep -ci ssh` es `0`; `list-commands` da `92` líneas; y
-> `./tmux -L vc -f /dev/null ssh-pane x` sale con código `1` y stderr
+> `0`; `nm ./tmux | grep -ci ssh` es `0`; `list-commands` da `92` líneas; y, con un
+> servidor arrancado con `tm new -d`, `tm ssh-pane x` sale con código `1` y stderr
 > `unknown command: ssh-pane`.
 
 ### INV-4 · Los panes normales siguen haciendo `exec`
@@ -1134,9 +1173,10 @@ invariante aunque todos los tests pasen.
 
 > **VC-INV-9** — En `tmux/`,
 > `git diff --name-only 94796f6 HEAD | grep -vxE 'configure\.ac|Makefile\.am|cmd-ssh-pane\.c|ssh-pane\.c|cmd\.c|tmux\.h|spawn\.c|window\.c|tmux\.1|regress/ssh-pane-[a-z0-9-]+\.sh'`
-> no imprime nada. Además, `git diff 94796f6 HEAD -- cmd.c tmux.h spawn.c window.c`
-> solo agrega líneas dentro de bloques `#ifdef ENABLE_SSH` … `#endif` (revisión del
-> diff: ninguna línea existente se borra ni se modifica fuera de esos bloques).
+> no imprime nada. Además, en los archivos de OpenBSD el cambio solo agrega líneas:
+> `git diff -U0 94796f6 HEAD -- cmd.c tmux.h spawn.c window.c | grep -v '^--- ' | grep -c '^-'` es
+> `0` (ninguna línea existente se borra ni se modifica), y cada hunk de ese diff empieza
+> con `#ifdef ENABLE_SSH` y termina con `#endif`, o cae entre ellos.
 
 ---
 
@@ -1224,7 +1264,8 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-43 | D-12 + hallazgo 4 | VC-43 | feliz |
 | FR-44 | D-12 + hallazgo 4 | VC-44 | feliz |
 | FR-45 | D-12 | VC-45 | falla parcial |
-| FR-46 | D-12 + hallazgo 4 | VC-46 | borde (cierre) |
+| FR-46a | D-12 + hallazgo 4 | VC-46a | borde (cierre) |
+| FR-46b | D-1 + riesgo "hijo sin `exec`" | VC-46b | borde (cierre del servidor) |
 | FR-47 | D-12 | VC-47 | falla (timeout) |
 | FR-48a | D-12 | VC-48a | falla |
 | FR-48b | D-12 | VC-48b | falla |
@@ -1234,7 +1275,8 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-49d | D-13 | VC-49d | borde |
 | FR-49e | D-13 + revisión (`respawn-window`) | VC-49e | borde |
 | FR-50 | D-1 | VC-50 | borde (mover) |
-| FR-51 | D-13 + hallazgo 2 | VC-51 | feliz |
+| FR-51a | D-13 + hallazgo 2 | VC-51a | feliz |
+| FR-51b | D-13 + hallazgo 2 | VC-51b | borde (respawn) |
 | FR-52 | D-14 + hallazgo 8 | VC-52 | borde |
 | FR-53 | D-14 + hallazgo 8 | VC-53 | borde |
 | FR-54 | D-7 + hallazgo 1 | VC-54 | borde |
@@ -1257,7 +1299,7 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | NFR-1 | Hallazgo 3 + D-1 | VC-NFR-1 | medición |
 | NFR-2 | D-12 | VC-NFR-2 | medición |
 
-**80 requerimientos (63 FR, 6 BR, 9 INV, 2 NFR), 80 VCs, 0 huérfanos.**
+**82 requerimientos (65 FR, 6 BR, 9 INV, 2 NFR), 82 VCs, 0 huérfanos.**
 
 ## Preguntas abiertas
 
@@ -1276,8 +1318,8 @@ corren al cerrar el incremento 1 y de nuevo al cerrar el último.
 | **1** | Límite de build: `--enable-ssh` en `configure.ac`/`Makefile.am`, entrada `ssh-pane` bajo `#ifdef` que valida argumentos y crea el pane con un hijo que por ahora sale con `255` y un mensaje fijo | — | VC-1 a VC-5, VC-15 a VC-22, VC-55, VC-INV-1 a VC-INV-3, VC-INV-6 a VC-INV-9 |
 | **2** | En el hijo: conexión, verificación del host, autenticación con las claves por defecto, shell remota y puente de bytes | 1 | VC-6 a VC-14, VC-23 a VC-28, VC-30, VC-32a, VC-32b, VC-33, VC-34, VC-BR-2 a VC-BR-4, VC-INV-4 |
 | **3** | Agente y detalle de la sesión remota: `TERM`, tamaño inicial, resize, modo crudo, nada de reenvíos | 2 | VC-29, VC-31, VC-35 a VC-41, VC-BR-1 (usa el escenario de VC-31) |
-| **4** | Ciclo de vida y fallas: plazo de 30 s, pérdida de conexión, `kill-pane`, respawn, `break-pane` | 3 | VC-42 a VC-50, VC-BR-5, VC-NFR-1, VC-NFR-2 |
-| **5** | Eventos, formatos y documentación en `tmux.1` | 4 | VC-51 a VC-54, VC-INV-5 (suite completa final) |
+| **4** | Ciclo de vida y fallas: plazo de 30 s, pérdida de conexión, `kill-pane`, `kill-server`, respawn, `break-pane` | 3 | VC-42 a VC-50, VC-BR-5, VC-NFR-1, VC-NFR-2 |
+| **5** | Eventos, formatos y documentación en `tmux.1` | 4 | VC-51a a VC-54, VC-INV-5 (suite completa final) |
 
 El incremento 1 es el más angosto que se puede ejercitar solo: prueba el límite
 solo-Linux (lo que más riesgo tiene de romper builds ajenos) antes de escribir una línea

@@ -64,11 +64,21 @@ siempre con `_exit`. El único precedente de `fork` sin `exec` en tmux es la
 daemonización, que llama a `event_reinit` (`server.c:198-199`); el puente no lo
 necesita, porque no usa libevent.
 
+**Costo de seguridad aceptado:** la copia de memoria que hereda el hijo incluye el
+contenido del servidor en el momento del `fork`: historial de todos los panes, buffers
+de pegado y entornos de sesión. Ese proceso pasa toda la conexión parseando datos de
+un host remoto con `libssh`. Si `libssh` tuviera un fallo de memoria explotable, esos
+datos quedarían expuestos, cosa que no pasa con un pane normal, que reemplaza la
+imagen con `exec`. Se acepta porque la única opción que lo evita (re-ejecutar tmux,
+primera fila de la tabla) tiene los costos que se detallan ahí, y porque el hijo corre
+con los mismos permisos que la persona, que ya puede leer esos datos. Si el riesgo
+dejara de ser aceptable, esa es la alternativa a retomar.
+
 **Descartado:**
 
 | Opción | Por qué no |
 |---|---|
-| Hijo que re-ejecuta tmux (`/proc/self/exe`) en un modo interno | Imagen de proceso limpia, pero agrega un punto de entrada oculto en `tmux.c` (archivo de OpenBSD, hallazgo 10) y hay que pasar los datos de conexión por argv o por el entorno, donde quedan visibles |
+| Hijo que re-ejecuta tmux (`/proc/self/exe`) en un modo interno | Imagen de proceso limpia (evita el costo de seguridad de arriba), pero agrega un punto de entrada oculto en `tmux.c` (archivo de OpenBSD, hallazgo 10) y hay que pasar los datos de conexión por argv o por el entorno, donde quedan visibles |
 | Cliente SSH en el servidor, con un socket registrado en libevent (patrón `job.c`) | El pane no tendría hijo ni PTY: habría que reescribir entrada, salida, resize y cierre (hallazgos 3 y 4). Rompe el invariante "el modelo de PTY/panes no cambia", y un error de no bloqueo congela todas las sesiones |
 | Pane vacío (`-E`, `SPAWN_EMPTY`) al que se le inyecta la salida | Con `fd = -1` tmux descarta teclado, pegado y resize (hallazgo 5): habría que crear rutas nuevas para todo eso |
 | Pasar `ssh` como `shell-command` | Ejecuta el binario externo: es justo lo que el enunciado excluye (hallazgo 2) |
@@ -481,6 +491,13 @@ control mode y que tmux no haga red ni cifrado (#1643, #5566). El `pledge` del s
 en OpenBSD no incluye `inet` ni `dns` (`tmux.c:540-542`). Como la red la hace un hijo y
 el feature no existe fuera de Linux, esa restricción no se toca.
 
+**Descartado:**
+
+| Opción | Por qué no |
+|---|---|
+| Diseñar el cambio para proponerlo upstream | El mantenedor ya eligió otra dirección (#1643, #5566); la spec dependería de una aceptación que no va a llegar |
+| Reemplazar el pedido por sesiones remotas con *control mode* | Es la dirección de upstream, pero no es un cliente SSH nativo: no cumple el enunciado (D-1) |
+
 ## 3. Esquema de arquitectura
 
 ```text
@@ -511,7 +528,8 @@ SIGCHLD → server_child_exited → remain-on-exit         libssh: known_hosts, 
 
 | Riesgo | Mitigación en la spec |
 |---|---|
-| El hijo sin `exec` arrastra estado del servidor | El puente no usa el loop heredado y termina con `_exit` (D-1); INV-4 verifica que los panes normales siguen haciendo `exec` |
+| El hijo sin `exec` arrastra estado del servidor | El puente no usa el loop heredado y termina con `_exit` (D-1); INV-4 verifica que los panes normales siguen haciendo `exec`; FR-46b, que el hijo no sobrevive al servidor |
+| El hijo conserva una copia de la memoria del servidor mientras habla con un host remoto | Costo aceptado y registrado en D-1; la alternativa que lo evita (re-ejecutar tmux) queda documentada |
 | Un merge de OpenBSD borra los `#ifdef` en `cmd.c`, `spawn.c`, `tmux.h` o `window.c` | Los VCs de la spec (con `--enable-ssh`) fallan si falta alguna pieza; el grueso del código vive en archivos propios de portable (D-4) |
 | La CI no verifica macOS, FreeBSD ni `--enable-ssh` | INV-1 a INV-3 son verificaciones manuales obligatorias, con receta; las de macOS y FreeBSD, diferenciales (D-15) |
 | Un agente "de paso" toca archivos fuera del alcance | INV-9: `git diff --name-only` contra el commit base solo puede listar los archivos de la tabla "Dentro" |
