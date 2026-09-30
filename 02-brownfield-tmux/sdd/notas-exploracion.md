@@ -6,22 +6,6 @@
 > Base: `tmux/` en el commit `94796f6b1182507efac8a272fc309a79e22e58a5`
 > (`git checkout 94796f6` antes de verificar).
 > Todas las referencias `archivo:línea` apuntan a ese checkout y son relativas a `tmux/`.
-> Los números de línea pueden correrse en commits posteriores; los nombres de
-> archivo y de función son lo estable.
-
-## El prompt que las produjo
-
-<!-- TODO: reemplazar por el prompt exacto que se usó, si difiere. -->
-
-```text
-Solo explorar, sin editar nada. En tmux quiero un comando que abra un pane con
-una sesión SSH remota sin invocar el binario ssh, compilado solo en Linux.
-Trazá cómo un pane nuevo lanza su proceso hijo, de la tabla de comandos al
-fork/exec, usando split-window como guía. Mostrame cómo aísla tmux el código
-de plataforma (compat/, osdep-*.c y los chequeos de configure) y cómo se
-integra un fd con el event loop. Devolveme notas con módulos tocados,
-interfaces reusadas y riesgos. Cada afirmación con archivo:línea.
-```
 
 ## Qué buscamos
 
@@ -73,19 +57,7 @@ prepara un entorno transitorio para el hijo y calcula el tamaño inicial
 (`spawn.c:307-452,591`). `fdforkpty` crea un hijo y un PTY
 conectado al pane (`spawn.c:454-490`). En el hijo, tmux limpia señales y
 descriptores, instala el entorno y termina en `execvp`, `$SHELL -c` o una shell
-de login, según la cantidad de argumentos (`spawn.c:539-575`):
-
-```c
-/* spawn.c:478 */
-new_wp->pid = fdforkpty(ptm_fd, &new_wp->fd, new_wp->tty, NULL, &ws);
-...
-/* spawn.c:550-553 — hijo, varios argumentos */
-if (new_wp->argc != 0 && new_wp->argc != 1) {
-	argvp = cmd_copy_argv(new_wp->argc, new_wp->argv);
-	execvp(argvp[0], argvp);
-	_exit(1);
-}
-```
+de login, según la cantidad de argumentos (`spawn.c:539-575`).
 
 **Consecuencia:** pasar `ssh` como `shell-command` ejecutaría un programa
 externo; no cumpliría el pedido. Además, `spawn_pane` es compartido por
@@ -163,12 +135,7 @@ mantenimiento.
 ### 6. Linux ya se detecta; SSH todavía no se compila por separado
 
 `configure.ac:1062-1065,1118-1123` identifica Linux como `PLATFORM=linux` y
-define la condición de Automake `IS_LINUX`:
-
-```m4
-AM_CONDITIONAL(IS_LINUX, test "x$PLATFORM" = xlinux)   # configure.ac:1122
-```
-
+define la condición de Automake `IS_LINUX`.
 `Makefile.am:90-91,235-255` lista fuentes comunes, elige `osdep-@PLATFORM@.c`
 y muestra otros casos de fuentes condicionales. El patrón de detección y
 enlace de una biblioteca está en `configure.ac:250-303` (libevent).
@@ -201,25 +168,10 @@ Tres patrones del repo sirven de molde para el límite solo-Linux:
   declara `--enable-sixel`, hace `AC_DEFINE(ENABLE_SIXEL)` y
   `AM_CONDITIONAL(ENABLE_SIXEL, …)`; `Makefile.am:253-255` agrega las fuentes
   y `tmux.h:79,1028,1104` guarda las declaraciones con `#ifdef ENABLE_SIXEL`.
-  Es el molde más cercano a "fuente nueva + declaraciones guardadas":
-
-  ```make
-  # Makefile.am:253-255
-  if ENABLE_SIXEL
-  dist_tmux_SOURCES += image.c image-sixel.c
-  endif
-  ```
-
+  Es el molde más cercano a "fuente nueva + declaraciones guardadas".
 - **Código específico de Linux dentro del hijo de `spawn_pane`.** Justo donde
   engancharía un hijo SSH ya hay una guarda de systemd/cgroups:
-
-  ```c
-  /* spawn.c:504-513 */
-  #if defined(HAVE_SYSTEMD) && defined(ENABLE_CGROUPS)
-  	if (systemd_move_to_new_cgroup(cause) < 0) { ... }
-  #endif
-  ```
-
+  `#if defined(HAVE_SYSTEMD) && defined(ENABLE_CGROUPS)` (`spawn.c:504-513`).
   Su contraparte de build es `configure.ac:500-541` y `Makefile.am:242-245`
   (`AC_DEFINE` + `AM_CONDITIONAL` + `compat/systemd.c`).
 - **Alternativa en el servidor.** `server.c:223-227` elige entre
@@ -364,25 +316,6 @@ descritas en los hallazgos 3 y 4, y con el precedente de `job.c`.
 7. Qué significan `pane-created`, `pane_current_command` y
    `pane_current_path` para un pane SSH (hallazgos 2 y 8).
 8. Dónde corre la biblioteca: hijo con PTY o servidor (hallazgos 3 y 9).
-
-## Lo que NO hace falta entender
-
-- **Render y terminal del cliente:** `tty.c`, `tty-*.c`, `screen-write.c`,
-  `screen-redraw.c`, `grid*.c`. El pane SSH entrega bytes al mismo parser
-  (`input.c`); lo que pasa después no cambia.
-- **Layout:** `layout*.c`. Se usa como caja negra vía
-  `layout_get_tiled_cell` / `layout_get_floating_cell`
-  (`cmd-split-window.c:175-179`).
-- **Modos y menús:** `window-copy.c`, `window-tree.c`, `mode-tree.c`, `menu.c`.
-- **Control mode y cliente:** `control.c`, `control-notify.c`, `client.c`.
-  Consumen la salida del pane sin saber de dónde viene.
-- **Parser de comandos:** `cmd-parse.y`. Un comando nuevo solo necesita su
-  `cmd_entry`.
-- **El resto de `compat/`:** salvo `fdforkpty.c` y `systemd.c`, son reemplazos
-  de libc que no se tocan.
-- **Sixel (`image*.c`):** solo interesa como molde de build (hallazgo 7).
-
-Acotar también es decidir qué no leer.
 
 ## Línea de base
 
