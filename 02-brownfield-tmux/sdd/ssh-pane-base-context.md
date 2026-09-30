@@ -230,6 +230,9 @@ cualquier diferencia entre versiones de tmux.
 - `[user@]host`: exactamente un argumento. Sin `user@`, el usuario es el nombre de la
   cuenta local del proceso (`getpwuid(getuid())`), no `$USER`, igual que `ssh`.
 - **No se lee `~/.ssh/config`.**
+- **Sin hook propio.** No dispara `after-split-window` y no existe `after-ssh-pane`:
+  la entrada no lleva `CMD_AFTERHOOK` (`cmd-queue.c:629-638`) y el ejecutor no llama a
+  `cmdq_insert_hook` como hace `split-window` (`cmd-split-window.c:315`).
 
 Los datos de conexión viajan en `spawn_context` y quedan en el pane (D-13), nunca en
 `sc.argv`. Así `spawn_pane` no los interpreta como comando local, no aplica
@@ -255,6 +258,8 @@ Los datos de conexión viajan en `spawn_context` y quedan en el pane (D-13), nun
 | Todos los flags de `split-window` | Varios no tienen un significado obvio para un pane remoto (`-c` directorio local, `-e` entorno, `-W` espera): mucha superficie sin pedido |
 | `host:port` en el destino | Choca con los literales IPv6 (`::1`) |
 | Datos de conexión en `sc.argv` | `spawn_pane` los trataría como comando local, les aplicaría `default-command` y los registraría como `cmd=` (hallazgo 2) |
+| Hook `after-ssh-pane` | Cada hook `after-<comando>` es una entrada de `options-table.c` (`OPTIONS_TABLE_AFTER_HOOK`, `options-table.c:273-275,1932`); sin ella, `set-hook` lo rechaza con `invalid option`. Sumarlo toca un archivo de OpenBSD más, sin pedido concreto |
+| Disparar `after-split-window` | El hook promete que corrió `split-window`; un script que lo escuche recibiría un pane que no pidió |
 
 ### D-8 · Verificación de la clave del host
 
@@ -396,6 +401,10 @@ bajo `#ifdef ENABLE_SSH`. No guarda ningún secreto porque el servidor no tiene 
   con `-k` si el pane está vivo o sin `-k` si está muerto.
 - `respawn-pane` **con comando** lo ejecuta como pane local, como hoy, y el pane deja
   de ser SSH.
+- `respawn-window` sobre una ventana cuyo primer pane es SSH también reconecta:
+  conserva ese pane y llama a `spawn_pane` con `SPAWN_RESPAWN`
+  (`spawn.c:129-150,209`), así que pasa por la misma lógica sin tocar
+  `cmd-respawn-window.c`.
 - `pane-created` informa como `pane_command` la forma normalizada
   `ssh-pane -p <port> <user>@<host>`.
 - `wp->argv` queda vacío y `wp->shell` tiene el valor de siempre (`default-shell`).
@@ -444,8 +453,13 @@ fuera de la superficie mínima. El valor es predecible y queda fijado por un req
 como no Linux, y no corre ni en PRs ni en forks (hallazgo 11), así que la comprobación
 la hace el equipo. FreeBSD es el BSD que compila tmux **portable** con `configure`;
 OpenBSD compila su propio árbol con su `Makefile` (hallazgo 10), que este cambio no
-toca. **La línea de base de FreeBSD todavía no está medida:** medirla es un requisito
-previo del plan.
+toca.
+
+**Cómo se compara:** en macOS y FreeBSD la verificación es **diferencial**: en la misma
+máquina y la misma corrida se construye y prueba el commit base y el commit con el
+cambio, con la misma receta (`SHELL=/bin/sh`). Así la línea de base de FreeBSD, que no
+se midió, no queda como un pendiente de la spec, y la de macOS, que se midió sin
+`SHELL=/bin/sh` (notas, "Línea de base"), no se compara contra una receta distinta.
 
 **Descartado:**
 
@@ -499,6 +513,7 @@ SIGCHLD → server_child_exited → remain-on-exit         libssh: known_hosts, 
 |---|---|
 | El hijo sin `exec` arrastra estado del servidor | El puente no usa el loop heredado y termina con `_exit` (D-1); INV-4 verifica que los panes normales siguen haciendo `exec` |
 | Un merge de OpenBSD borra los `#ifdef` en `cmd.c`, `spawn.c`, `tmux.h` o `window.c` | Los VCs de la spec (con `--enable-ssh`) fallan si falta alguna pieza; el grueso del código vive en archivos propios de portable (D-4) |
-| La CI no verifica macOS, FreeBSD ni `--enable-ssh` | INV-1 a INV-3 son verificaciones manuales obligatorias, con receta |
+| La CI no verifica macOS, FreeBSD ni `--enable-ssh` | INV-1 a INV-3 son verificaciones manuales obligatorias, con receta; las de macOS y FreeBSD, diferenciales (D-15) |
+| Un agente "de paso" toca archivos fuera del alcance | INV-9: `git diff --name-only` contra el commit base solo puede listar los archivos de la tabla "Dentro" |
 | Los tests nuevos rompen la suite en builds sin el feature | INV-6: los tests de `ssh-pane` se saltean con código `0` si el comando no existe |
 | `.tmux.conf` compartido con `ssh-pane` | Costo aceptado (D-6); se documenta en `tmux.1` |

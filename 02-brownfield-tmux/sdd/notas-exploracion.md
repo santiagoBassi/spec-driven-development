@@ -52,6 +52,12 @@ selección, redibuja y dispara el hook `after-split-window`
 (`cmd-split-window.c:288-319`). Ese es el comportamiento observable que sirve
 de referencia para un comando nuevo.
 
+Los hooks `after-<comando>` no se crean solos: el genérico se inserta solo si la
+entrada tiene `CMD_AFTERHOOK` (`cmd-queue.c:629-638`), y cada nombre tiene que
+existir como opción en `options-table.c` (`OPTIONS_TABLE_AFTER_HOOK`,
+`options-table.c:273-275`; `after-split-window` en `:1932`). Sin esa entrada,
+`set-hook -g after-<nombre>` falla con `invalid option` (`cmd-set-option.c:269`).
+
 ### 2. `spawn_pane` crea un proceso real, no solo una pantalla
 
 `spawn_pane` crea o reutiliza el `window_pane`, copia los argumentos al pane,
@@ -66,7 +72,9 @@ externo; no cumpliría el pedido. Además, `spawn_pane` es compartido por
 `split-window`, `spawn_window`, `respawn-pane`, popups y el editor interno
 (`cmd-split-window.c:208`; `spawn.c:209,772`;
 `cmd-respawn-pane.c:83`; `cmd-display-menu.c:499`). Cualquier bifurcación
-para SSH debe distinguirla de los panes normales.
+para SSH debe distinguirla de los panes normales. `respawn-window` también llega
+acá: conserva el primer pane de la ventana y lo pasa a `spawn_pane` con
+`SPAWN_RESPAWN` (`spawn.c:129-150,209`).
 
 Tampoco alcanza con pasar host y opciones SSH como `sc.argv`: `spawn_pane`
 interpreta esos argumentos como comando local, aplica `default-command` si no
@@ -593,7 +601,13 @@ done
 ```
 
 En la CI no aparece porque el usuario del runner tiene `bash` sin
-personalizar. Si la verificación del feature da rojo en `screen-redraw-*` o
+personalizar.
+
+**Trampa para los VCs: `dash` no hace `exec` del último comando.** En Ubuntu 24.04
+`/bin/sh` es `dash` 0.5.12, y `sh -c 'sleep 3'` queda como proceso `dash` con `sleep`
+de hijo (medido con `readlink /proc/<pid>/exe`). Un pane con un solo argumento pasa
+por `$SHELL -c` (`spawn.c:560-568`), así que su `pane_pid` es `dash`; con dos o más
+argumentos usa `execvp` (`spawn.c:550-554`) y el `pane_pid` es el programa. Si la verificación del feature da rojo en `screen-redraw-*` o
 `check-names.sh`, primero hay que descartar esto.
 
 La línea de base de macOS se midió sin `--enable-asan`, a diferencia de la CI

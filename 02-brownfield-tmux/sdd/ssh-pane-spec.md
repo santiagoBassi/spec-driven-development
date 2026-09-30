@@ -1,7 +1,9 @@
 # `ssh-pane` — spec
 
-> **Estado: borrador, pendiente de revisión.** Sin preguntas abiertas. La línea de base
-> de FreeBSD todavía no está medida: medirla es un requisito previo del plan (INV-2).
+> **Estado: revisada (2026-09-30), lista para planificar.** Sin preguntas abiertas. Los
+> invariantes de macOS y FreeBSD se verifican de forma diferencial (commit base contra
+> commit con el cambio, en la misma máquina y con la misma receta), así que no dependen
+> de una línea de base medida de antemano en esas plataformas.
 >
 > Construida a partir de [`notas-exploracion.md`](./notas-exploracion.md) (se citan como
 > "hallazgo N") y de [`ssh-pane-base-context.md`](./ssh-pane-base-context.md), donde
@@ -16,8 +18,8 @@
 > requisitos hermanos, que comparten tema, llevan el mismo número con un sufijo (`a`,
 > `b`, …). Si una línea no se puede verificar, no está especificada.
 >
-> Esta spec describe la **v1 completa**. Cómo se parte en iteraciones se decide en el
-> plan, no acá.
+> Esta spec describe la **v1 completa**. El orden de entrega en incrementos está al
+> final ("Orden de entrega"); el detalle de cada iteración va en el plan.
 
 ## Propósito
 
@@ -59,7 +61,15 @@ Por path. **Estos archivos no se modifican:**
   adaptan (D-14).
 - **`compat/`**: no aporta nada al feature (D-4).
 - **`tmux.c`**: sin punto de entrada nuevo ni cambios de `pledge` (D-1, D-16).
-- **`options-table.c`**: el feature no agrega opciones.
+- **`options-table.c`**: el feature no agrega opciones ni el hook `after-ssh-pane`
+  (FR-55).
+- **`cmd-respawn-window.c`, `cmd-display-menu.c`, `cmd-break-pane.c`, `layout.c`,
+  `cmd-find.c`, `arguments.c`**: los demás callers de `spawn_pane`, los comandos que
+  operan sobre un pane SSH (FR-49e, FR-50) y la infraestructura de parseo, targets y
+  layout que `ssh-pane` reusa no cambian.
+
+Regla general: **solo cambian los archivos de la tabla "Dentro"** (INV-9). Cualquier
+otro archivo modificado es una violación del alcance, aunque los tests pasen.
 - **`.github/workflows/`, `.travis.yml`**: la CI de upstream no se modifica (INV-1 a
   INV-3 se verifican a mano).
 
@@ -126,11 +136,17 @@ Medida **antes** de tocar una línea, sobre el commit base. El detalle está en 
 | **Linux** (Ubuntu 24.04.5 x86_64) | `./configure --enable-utf8proc --enable-asan`: 0 warnings | **164 PASS, 0 FAIL** con `SHELL=/bin/sh` | `nm tmux` sin símbolos que contengan `ssh`; `list-commands` = 92 líneas |
 | **Linux estático** (flags de `tmux-builds`, con glibc) | `./configure --enable-static --enable-utf8proc --disable-jemalloc`: compila, 7 warnings del enlazador de glibc | — | `nm tmux` sin símbolos `ssh` |
 | **macOS** 26 arm64 | `./configure --disable-jemalloc`: 0 warnings | **163 PASS, 1 FAIL** (`screen-redraw-menus.sh`, preexistente) | — |
-| **FreeBSD** | **Pendiente de medir** (prerrequisito del plan) | Pendiente | Pendiente |
+| **FreeBSD** | No medida | — | — |
 
 La receta de la suite es la de las notas: desde `regress/`,
 `env -i LC_CTYPE=C.UTF-8 MallocNanoZone=0 SHELL=/bin/sh sh -x <test>` para cada `*.sh`.
 En macOS no se usa `make -C regress` (hallazgo "runner que no corre nada").
+
+La fila de macOS se midió **sin** `SHELL=/bin/sh` (notas, "Línea de base"), y la de
+FreeBSD no se midió. Por eso VC-INV-1 y VC-INV-2 no comparan contra esta tabla sino
+**en forma diferencial**: en la misma máquina y en la misma corrida se construye y se
+prueba el commit base y el commit con el cambio, con los mismos flags y la receta de
+arriba. La tabla queda como referencia de lo esperable.
 
 Al cerrar el cambio, cada fila tiene que dar lo mismo, más los tests nuevos. Cualquier
 diferencia es una regresión, no un efecto colateral aceptable.
@@ -146,7 +162,12 @@ Los VCs corren contra estos entornos. Construirlos es parte del plan, no de la s
   `netcat-openbsd`. tmux se construye con
   `sh autogen.sh && ./configure --enable-utf8proc --enable-asan --enable-ssh && make`,
   salvo en los VCs de build. La cuenta local `tester` tiene `/bin/sh` como shell de
-  login y la contraseña `vc-password`.
+  login y la contraseña `vc-password`. **tmux y todos los VCs corren como `tester`**;
+  solo `sshd`, `apt-get`, `strace` y las escrituras en `/etc/ssh/` corren como root.
+- **`/bin/sh` es `dash`**, que con `-c` no reemplaza su proceso por el último comando:
+  un pane creado con un solo argumento (`split-window 'sleep 100'`) tiene como proceso
+  a `dash`, y `sleep` es su hijo. Para ver el `exec` directo hay que pasar dos o más
+  argumentos (`execvp`, `spawn.c:550-554`).
 - **Claves de prueba.** Pares generados una vez con `ssh-keygen`:
   `K_ed` (ed25519), `K_ec` (ecdsa) y `K_rsa` (rsa), sin passphrase; `K_pass` (ed25519,
   passphrase `vc-pass`); `K_agent` (ed25519, sin passphrase, solo se carga en el
@@ -163,7 +184,7 @@ Los VCs corren contra estos entornos. Construirlos es parte del plan, no de la s
 - **HOME de prueba `$T`.** Un directorio temporal nuevo por VC. La configuración
   estándar de `$T/.ssh/` es: `known_hosts` con las líneas `[127.0.0.1]:2222 <HK_A>` y
   `127.0.0.1 <HK_A>`, e `id_ed25519` = `K_ed` (con su `.pub`), permisos `0600`. Cada VC
-  indica lo que cambia. `/etc/ssh/ssh_known_hosts` no existe, salvo en VC-30.
+  indica lo que cambia. `/etc/ssh/ssh_known_hosts` no existe, salvo en VC-28.
 - **`ssh` trampa.** `$T/bin/ssh` es un script que crea `$T/ssh-invoked` y sale con `1`.
 - **Servidor tmux de prueba.** `tm` abrevia
   `env -i HOME=$T PATH=$T/bin:/usr/bin:/bin SHELL=/bin/sh LC_CTYPE=C.UTF-8 TERM=screen ./tmux -L vc -f /dev/null`.
@@ -838,6 +859,20 @@ hay conexión SSH.
 > **VC-49d** — Después de VC-49c, `tm clear-history -t %1`; `tm respawn-pane -k -t %1`;
 > esperar `local-cmd`; `/var/log/sshd-vc.log` no registra ninguna conexión nueva.
 
+#### FR-49e · Reconectar con `respawn-window -k`
+
+**Dado** una ventana cuyo único pane es un pane SSH con la shell remota abierta,
+**Cuando** la persona ejecuta `respawn-window -k` sin comando sobre esa ventana,
+**Entonces** el pane vuelve a conectar al mismo destino, igual que en FR-49a:
+`respawn-window` conserva el primer pane y llama a `spawn_pane` con `SPAWN_RESPAWN`
+(`spawn.c:129-150,209`), así que usa la misma lógica de D-13.
+
+> **VC-49e** — Con el escenario de VC-6, `tm break-pane -d -s %1` (la ventana nueva
+> queda con `%1` como único pane); se anotan `pane_pid` y la línea `R=…`;
+> `tm respawn-window -k -t "$(tm display -p -t %1 '#{window_id}')"`; la prueba de remoto
+> en `%1` muestra una línea `R=…` con otro puerto de origen y el mismo destino
+> (` 127.0.0.1 2222`), y `pane_pid` cambió.
+
 #### FR-50 · Conservar la conexión al mover el pane
 
 **Dado** un pane SSH con la shell remota abierta,
@@ -856,13 +891,17 @@ hay conexión SSH.
 **Cuando** se crea un pane con `ssh-pane`,
 **Entonces** el hook recibe como `pane_command` la forma normalizada
 `ssh-pane -p <port> <user>@<host>`, con el usuario y el puerto ya resueltos, y
-`created_empty` = `0`. El evento no acredita que la conexión se haya establecido
-(hallazgo 2).
+`created_empty` = `0`. Un respawn que reconecta (FR-49a, FR-49b, FR-49e) informa el
+mismo `pane_command`, con `created_respawn` = `1` (`spawn.c:105-108`). El evento no
+acredita que la conexión se haya establecido (hallazgo 2).
 
 > **VC-51** — `tm set -g @pc 0`;
-> `tm set-hook -g pane-created 'set -gF @pc "#{hook_pane}:#{hook_pane_command}:#{hook_created_empty}"'`;
+> `tm set-hook -g pane-created 'set -gF @pc "#{hook_pane}:#{hook_pane_command}:#{hook_created_empty}:#{hook_created_respawn}"'`
+> (la misma forma que `regress/hooks-notify.sh:284`);
 > `tm ssh-pane -t %0 127.0.0.1`; en menos de 5 s, `tm show -gv @pc` imprime
-> `%1:ssh-pane -p 22 tester@127.0.0.1:0`.
+> `%1:ssh-pane -p 22 tester@127.0.0.1:0:0`. Después de la prueba de remoto,
+> `tm respawn-pane -k -t %1`; en menos de 5 s, `tm show -gv @pc` imprime
+> `%1:ssh-pane -p 22 tester@127.0.0.1:0:1`.
 
 #### FR-52 · Informar `tmux` como comando actual
 
@@ -893,6 +932,20 @@ hay conexión SSH.
 > **VC-54** — `tm set -g @as 0`; `tm set-hook -g after-split-window 'set -g @as 1'`;
 > `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1`; después de la prueba de remoto,
 > `tm show -gv @as` imprime `0`. Con `tm split-window -t %0` imprime `1`.
+
+#### FR-55 · No existe el hook `after-ssh-pane`
+
+**Dado** un build con el feature,
+**Cuando** la persona intenta definir el hook `after-ssh-pane`,
+**Entonces** tmux lo rechaza igual que cualquier opción inexistente. Los hooks
+`after-<comando>` son entradas de `options-table.c`
+(`OPTIONS_TABLE_AFTER_HOOK`, `options-table.c:273-275,1932`), que queda fuera de
+alcance; la entrada de `ssh-pane` no lleva `CMD_AFTERHOOK` (`cmd-queue.c:629-638`) y el
+ejecutor no inserta ningún hook.
+
+> **VC-55** — `tm set-hook -g after-ssh-pane 'set -g @x 1'` sale con código `1` y
+> stderr `invalid option: after-ssh-pane` (`cmd-set-option.c:269`), igual que en el
+> binario de la línea de base.
 
 ---
 
@@ -997,19 +1050,25 @@ FreeBSD ni `--enable-ssh` (hallazgo 11).
 
 ### INV-1 · macOS sigue compilando, sin el feature
 
-> **VC-INV-1** — En macOS, `sh autogen.sh && ./configure --disable-jemalloc && make`
-> termina sin warnings y la salida de `configure` contiene `configure: libssh: off`;
-> `nm ./tmux | grep -ci ssh` es `0`; `./tmux -L vc -f /dev/null list-commands | wc -l`
-> es `92`; `./tmux -L vc -f /dev/null ssh-pane x` sale con código `1` y stderr
-> `unknown command: ssh-pane`; y la suite da **163 PASS, 1 FAIL**
-> (`screen-redraw-menus.sh`), igual que la línea de base.
+> **VC-INV-1** — En macOS, en dos copias limpias (commit base y commit con el cambio),
+> `sh autogen.sh && ./configure --disable-jemalloc && make`. En las dos, `make` termina
+> sin warnings; en la del cambio, además: la salida de `configure` contiene
+> `configure: libssh: off`, `nm ./tmux | grep -ci ssh` es `0`,
+> `./tmux -L vc -f /dev/null list-commands | wc -l` es `92` y
+> `./tmux -L vc -f /dev/null ssh-pane x` sale con código `1` y stderr
+> `unknown command: ssh-pane`. La suite, con la receta de la línea de base
+> (`SHELL=/bin/sh`), da el **mismo conjunto de tests PASS y FAIL** en las dos copias
+> (los `regress/ssh-pane-*.sh` nuevos se cuentan aparte, por INV-6).
 
 ### INV-2 · FreeBSD sigue compilando, sin el feature
 
-> **VC-INV-2** — En FreeBSD, `sh autogen.sh && ./configure && make` da el mismo
-> resultado que su línea de base (a medir antes de implementar), la salida de
-> `configure` contiene `configure: libssh: off`, `nm ./tmux | grep -ci ssh` es `0`,
-> `list-commands` da `92` líneas y `ssh-pane` es `unknown command: ssh-pane`.
+> **VC-INV-2** — En FreeBSD, igual que VC-INV-1 pero con `./configure` sin flags
+> extra: las dos copias compilan con la **misma cantidad de warnings**; en la del
+> cambio, `configure` imprime `configure: libssh: off`, `nm ./tmux | grep -ci ssh` es
+> `0`, `list-commands` da `92` líneas y `ssh-pane` es `unknown command: ssh-pane`; y la
+> suite da el mismo conjunto de tests PASS y FAIL en las dos copias. Si el commit base
+> no compila en FreeBSD, el invariante se reporta como **no verificable** (no como
+> PASS) y se escala antes de cerrar.
 
 ### INV-3 · Linux sin `--enable-ssh` queda como antes, aunque `libssh` esté instalada
 
@@ -1025,10 +1084,12 @@ FreeBSD ni `--enable-ssh` (hallazgo 11).
 En un build con el feature, los panes que no son SSH se crean exactamente como antes:
 el hijo hace `exec` de la shell o del comando (`spawn.c:546-575`).
 
-> **VC-INV-4** — En `L` con `--enable-ssh`, `tm split-window -t %0` y
-> `tm split-window -t %0 'sleep 100'`: `readlink /proc/<pane_pid>/exe` es `/usr/bin/dash`
-> (la shell `/bin/sh`) y `/usr/bin/sleep`, respectivamente. `tm respawn-pane -k -t %1`
-> sobre un pane creado con `split-window` vuelve a lanzar la shell local.
+> **VC-INV-4** — En `L` con `--enable-ssh`, `tm split-window -t %0` (crea `%1`) y
+> `tm split-window -t %0 sleep 100` (dos argumentos: `execvp`, crea `%2`):
+> `readlink /proc/<pane_pid>/exe` es `/usr/bin/dash` (la shell `/bin/sh`) para `%1` y
+> `/usr/bin/sleep` para `%2`. Después, `tm respawn-pane -k -t %1` deja en `%1` un
+> `pane_pid` nuevo cuyo `exe` también es `/usr/bin/dash`, y `/var/log/sshd-vc.log` no
+> registra ninguna conexión nueva en todo el VC.
 
 ### INV-5 · La suite existente pasa en Linux con el feature
 
@@ -1064,6 +1125,18 @@ feature (hallazgo 12).
 > binario estático con los mismos 7 warnings del enlazador de la línea de base, la
 > salida de `configure` contiene `configure: libssh: off`, y `nm ./tmux | grep -ci ssh`
 > es `0`.
+
+### INV-9 · Solo cambian los archivos declarados en el alcance
+
+El cambio modifica o agrega únicamente los archivos de la tabla "Dentro". Es lo que
+hace verificable la lista "Fuera": un agente que "de paso" toca otro archivo rompe este
+invariante aunque todos los tests pasen.
+
+> **VC-INV-9** — En `tmux/`,
+> `git diff --name-only 94796f6 HEAD | grep -vxE 'configure\.ac|Makefile\.am|cmd-ssh-pane\.c|ssh-pane\.c|cmd\.c|tmux\.h|spawn\.c|window\.c|tmux\.1|regress/ssh-pane-[a-z0-9-]+\.sh'`
+> no imprime nada. Además, `git diff 94796f6 HEAD -- cmd.c tmux.h spawn.c window.c`
+> solo agrega líneas dentro de bloques `#ifdef ENABLE_SSH` … `#endif` (revisión del
+> diff: ninguna línea existente se borra ni se modifica fuera de esos bloques).
 
 ---
 
@@ -1159,11 +1232,13 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-49b | D-13 | VC-49b | feliz |
 | FR-49c | D-13 | VC-49c | borde |
 | FR-49d | D-13 | VC-49d | borde |
+| FR-49e | D-13 + revisión (`respawn-window`) | VC-49e | borde |
 | FR-50 | D-1 | VC-50 | borde (mover) |
 | FR-51 | D-13 + hallazgo 2 | VC-51 | feliz |
 | FR-52 | D-14 + hallazgo 8 | VC-52 | borde |
 | FR-53 | D-14 + hallazgo 8 | VC-53 | borde |
 | FR-54 | D-7 + hallazgo 1 | VC-54 | borde |
+| FR-55 | D-7 + hallazgo 1 | VC-55 | borde (hook) |
 | BR-1 | D-1, D-9 + hallazgo 3 | VC-BR-1 | invariante |
 | BR-2 | D-9 | VC-BR-2 | invariante |
 | BR-3a | D-10 | VC-BR-3a | borde |
@@ -1178,17 +1253,33 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | INV-6 | Hallazgo 11 + D-15 | VC-INV-6 | invariante |
 | INV-7 | Hallazgo 12 + D-5 | VC-INV-7 | invariante |
 | INV-8 | Hallazgo 11 + D-3 | VC-INV-8 | invariante (build) |
+| INV-9 | Lección 2 (superficie acotada) + D-4 | VC-INV-9 | invariante (alcance) |
 | NFR-1 | Hallazgo 3 + D-1 | VC-NFR-1 | medición |
 | NFR-2 | D-12 | VC-NFR-2 | medición |
 
-**77 requerimientos (61 FR, 6 BR, 8 INV, 2 NFR), 77 VCs, 0 huérfanos.**
+**80 requerimientos (63 FR, 6 BR, 9 INV, 2 NFR), 80 VCs, 0 huérfanos.**
 
 ## Preguntas abiertas
 
 Ninguna. Las decisiones pendientes 1 a 11 de las notas se resolvieron en el base
 context (D-1 a D-16).
 
-## Qué sigue
+## Orden de entrega
 
-El plan de iteraciones va en `ssh-pane-plan.md`. Su primer paso es medir la línea de
-base de FreeBSD (INV-2).
+La v1 se entrega en incrementos, en orden de dependencia. **Cada incremento termina
+cuando pasan sus VCs y, además, siguen verdes INV-3, INV-5 e INV-9** (la suite
+existente y el alcance). Los invariantes de macOS y FreeBSD (INV-1, INV-2, INV-6) se
+corren al cerrar el incremento 1 y de nuevo al cerrar el último.
+
+| # | Incremento | Depende de | Cierra |
+|---|---|---|---|
+| **1** | Límite de build: `--enable-ssh` en `configure.ac`/`Makefile.am`, entrada `ssh-pane` bajo `#ifdef` que valida argumentos y crea el pane con un hijo que por ahora sale con `255` y un mensaje fijo | — | VC-1 a VC-5, VC-15 a VC-22, VC-55, VC-INV-1 a VC-INV-3, VC-INV-6 a VC-INV-9 |
+| **2** | En el hijo: conexión, verificación del host, autenticación con las claves por defecto, shell remota y puente de bytes | 1 | VC-6 a VC-14, VC-23 a VC-28, VC-30, VC-32a, VC-32b, VC-33, VC-34, VC-BR-2 a VC-BR-4, VC-INV-4 |
+| **3** | Agente y detalle de la sesión remota: `TERM`, tamaño inicial, resize, modo crudo, nada de reenvíos | 2 | VC-29, VC-31, VC-35 a VC-41, VC-BR-1 (usa el escenario de VC-31) |
+| **4** | Ciclo de vida y fallas: plazo de 30 s, pérdida de conexión, `kill-pane`, respawn, `break-pane` | 3 | VC-42 a VC-50, VC-BR-5, VC-NFR-1, VC-NFR-2 |
+| **5** | Eventos, formatos y documentación en `tmux.1` | 4 | VC-51 a VC-54, VC-INV-5 (suite completa final) |
+
+El incremento 1 es el más angosto que se puede ejercitar solo: prueba el límite
+solo-Linux (lo que más riesgo tiene de romper builds ajenos) antes de escribir una línea
+de SSH. El plan (`ssh-pane-plan.md`) detalla cada incremento; no puede cambiar este
+orden sin volver a Revisar.
