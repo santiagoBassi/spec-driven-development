@@ -13,7 +13,7 @@
 > referencia `archivo:línea` es relativa a `tmux/` en ese commit.
 >
 > Regla estructural: **cada FR, BR, INV y NFR tiene un VC, y cada VC corresponde a un
-> único requisito.** El VC lleva el identificador de su requisito: VC-13 verifica FR-13,
+> único requisito.** El VC lleva el identificador de su requisito: VC-12 verifica FR-12,
 > VC-BR-2 verifica BR-2, VC-INV-3 verifica INV-3 y VC-NFR-1 verifica NFR-1. Los
 > requisitos hermanos, que comparten tema, llevan el mismo número con un sufijo (`a`,
 > `b`, …). Si una línea no se puede verificar, no está especificada.
@@ -166,7 +166,13 @@ Los VCs corren contra estos entornos. Construirlos es parte del plan, no de la s
   `sh autogen.sh && ./configure --enable-utf8proc --enable-asan --enable-ssh && make`,
   salvo en los VCs de build. La cuenta local `tester` tiene `/bin/sh` como shell de
   login y la contraseña `vc-password`. **tmux y todos los VCs corren como `tester`**;
-  solo `sshd`, `apt-get`, `strace` y las escrituras en `/etc/ssh/` corren como root.
+  solo `sshd`, `apt-get`, `strace`, `setpriv` y las escrituras en `/etc/ssh/` corren
+  como root.
+- **UID sin cuenta.** La UID `54321` no tiene entrada en la base de cuentas
+  (`getent passwd 54321` no imprime nada). `tmu` es `tm` precedido por
+  `setpriv --reuid=54321 --regid=54321 --clear-groups`, con `$T` de dueño `54321`.
+  tmux arranca igual sin cuenta: la shell y el home tienen respaldo
+  (`tmux.c:86-94`, `tmux.c:416-423`).
 - **`/bin/sh` es `dash`**, que con `-c` no reemplaza su proceso por el último comando:
   un pane creado con un solo argumento (`split-window 'sleep 100'`) tiene como proceso
   a `dash`, y `sleep` es su hijo. Para ver el `exec` directo hay que pasar dos o más
@@ -380,16 +386,33 @@ la shell de login remota de `<user>`.
 > `tm display -p -t %2 '#{pane_left}'` imprime `0` y
 > `tm display -p -t %0 '#{pane_height}'` es menor que `40`: se partió `%0`, no `%1`.
 
-#### FR-13 · Usar la cuenta local si no hay `user@`
+#### FR-13a · Usar la cuenta local si no hay `user@`
 
 **Dado** un entorno del pane en el que `USER` tiene otro valor,
 **Cuando** la persona ejecuta `ssh-pane` con un destino sin `user@`,
 **Entonces** el usuario remoto es el nombre de la cuenta local del proceso
 (`getpwuid(getuid())`), no el valor de `USER`.
 
-> **VC-13** — `tm set-environment -g USER nobody`;
+> **VC-13a** — `tm set-environment -g USER nobody`;
 > `tm ssh-pane -t %0 -p 2222 127.0.0.1`; remoto `whoami`; esperar `tester`.
 > `/var/log/sshd-vc.log` contiene `Accepted publickey for tester`.
+
+#### FR-13b · Rechazar un destino sin `user@` si la cuenta local no existe
+
+**Dado** un servidor tmux que corre con una UID sin entrada en la base de cuentas
+(`getpwuid(getuid())` devuelve `NULL`),
+**Cuando** la persona ejecuta `ssh-pane` con un destino sin `user@`,
+**Entonces** el comando falla con `cannot determine local user name`, sin crear ningún
+pane ni iniciar ninguna conexión.
+
+*Por qué:* el usuario se resuelve en el comando, porque `pane-created` ya lo informa
+resuelto (FR-51a). Tomar `USER` como respaldo contradice D-7, e inventar un nombre
+conectaría como una cuenta que nadie pidió. `ssh` también corta en este caso.
+
+> **VC-13b** — `tmu new -d -x 120 -y 40`;
+> `tmu ssh-pane -t %0 -p 2222 127.0.0.1` sale con código `1` y stderr exactamente
+> `cannot determine local user name`; después, `tmu list-panes | wc -l` sigue siendo
+> `1` y `/var/log/sshd-vc.log` no registra ninguna conexión nueva.
 
 #### FR-14 · Usar el puerto 22 si no hay `-p`
 
@@ -530,7 +553,7 @@ Cuál de los errores se informa no está especificado.
 
 ### Verificación del host
 
-En esta sección, `<dir-ssh>` es el de BR-3a y BR-3b; en los VCs, `$T/.ssh`.
+En esta sección, `<dir-ssh>` es el de BR-3a a BR-3c; en los VCs, `$T/.ssh`.
 
 #### FR-23 · Rechazar un host que no está en `known_hosts`
 
@@ -900,16 +923,16 @@ proceso con red y credenciales vivo sin ningún tmux que lo muestre.
 > `ss -Htn state established '( dport = :2222 )' | wc -l` es `0` y
 > `pgrep -f '^sshd: tester'` no imprime nada.
 
-#### FR-47 · Abandonar la conexión a los 30 s
+#### FR-47 · Informar que se cumplió el plazo de conexión
 
 **Dado** un destino que acepta la conexión TCP y no responde,
-**Cuando** pasan 30 s desde que empezó el hijo sin que se abra la shell remota,
+**Cuando** se cumple el plazo de conexión (NFR-2) sin que se abra la shell remota,
 **Entonces** el hijo escribe `ssh-pane: <host>:<port>: timed out after 30s` en el pane
 y termina según BR-5.
 
-> **VC-47** — Con remain-on-exit, `tm ssh-pane -t %0 -p 2223 tester@127.0.0.1`: antes de
-> 30 s, el estado del pane es `0 ` (vivo); a los 35 s, el pane muestra
-> `ssh-pane: 127.0.0.1:2223: timed out after 30s` y su estado es `1 255`.
+> **VC-47** — Con remain-on-exit, `tm ssh-pane -t %0 -p 2223 tester@127.0.0.1`: a los
+> 40 s, el pane muestra `ssh-pane: 127.0.0.1:2223: timed out after 30s` y su estado es
+> `1 255`. Cuándo termina el pane lo mide VC-NFR-2.
 
 #### FR-48a · Informar una conexión rechazada
 
@@ -1145,11 +1168,30 @@ Si el entorno del pane no define `HOME`, `<dir-ssh>` es el directorio `.ssh` del
 de la cuenta local según `getpwuid(getuid())`.
 
 *Fundamento:* es el mismo respaldo que usa tmux para la shell por defecto (D-10).
-*Excepciones:* ninguna.
+*Excepciones:* BR-3c, si la cuenta local no existe.
 
 > **VC-BR-3b** — Con `/home/tester/.ssh/` en la configuración estándar y
 > `tm set-environment -gu HOME`, `tm ssh-pane -t %0 -p 2222 tester@127.0.0.1` y la
 > prueba de remoto muestran `R=127.0.0.1 `.
+
+### BR-3c · Sin `HOME` ni cuenta local, el hijo no conecta
+
+Si el entorno del pane no define `HOME` y `getpwuid(getuid())` devuelve `NULL`, no hay
+`<dir-ssh>`. El hijo no abre ninguna conexión, escribe
+`ssh-pane: <host>:<port>: cannot determine home directory` en el pane y termina según
+BR-5.
+
+*Fundamento:* sin `<dir-ssh>` no hay `known_hosts` contra el que verificar el host
+(D-8). Usar otro directorio, como `/` o el directorio actual, leería claves y
+`known_hosts` de un lugar que la persona no eligió (D-10).
+*Excepciones:* ninguna.
+
+> **VC-BR-3c** — `tmu new -d -x 120 -y 40`; `tmu set -g remain-on-exit on`;
+> `tmu set-environment -gu HOME`; `tmu ssh-pane -t %0 -p 2222 tester@127.0.0.1`: leer
+> `tmu capture-pane -p -t %1` hasta que contenga
+> `ssh-pane: 127.0.0.1:2222: cannot determine home directory` (como en *Esperar*);
+> `tmu display -p -t %1 '#{pane_dead} #{pane_dead_status}'` imprime `1 255`; y
+> `/var/log/sshd-vc.log` no registra ninguna conexión nueva.
 
 ### BR-4 · `known_hosts` es de solo lectura
 
@@ -1164,9 +1206,10 @@ El comando nunca crea, modifica ni borra `<dir-ssh>/known_hosts`.
 
 ### BR-5 · Cómo termina el hijo ante una falla
 
-Toda falla de conexión, de verificación del host o de autenticación, toda pérdida de
-la conexión y toda shell remota terminada por una señal (FR-45b) terminan así: el hijo escribe una sola línea que empieza con `ssh-pane: `
-en el PTY y sale con código `255`. Después, el pane sigue `remain-on-exit` como
+Toda falla de conexión, de verificación del host o de autenticación, la falta de
+`<dir-ssh>` (BR-3c), toda pérdida de la conexión y toda shell remota terminada por una
+señal (FR-45b) terminan así: el hijo escribe una sola línea que empieza con
+`ssh-pane: ` en el PTY y sale con código `255`. Después, el pane sigue `remain-on-exit` como
 cualquier otro (`server-fn.c:354-435`). El comando `ssh-pane` ya había terminado con
 éxito (FR-42).
 
@@ -1176,8 +1219,9 @@ normal de la shell remota (FR-43).
 *Excepciones:* ninguna.
 
 > **VC-BR-5** — En VC-23, VC-24, VC-25a, VC-25b, VC-26, VC-28, VC-34, VC-45a, VC-45b,
-> VC-47, VC-48a y VC-48b, el estado del pane es `1 255` y `tm capture-pane -p -t %1` tiene exactamente
-> una línea que empieza con `ssh-pane: `. Sin remain-on-exit, el mismo escenario de
+> VC-47, VC-48a, VC-48b y VC-BR-3c, el estado del pane es `1 255` y
+> `capture-pane -p -t %1` (con `tm`, o con `tmu` en VC-BR-3c) tiene exactamente una
+> línea que empieza con `ssh-pane: `. Sin remain-on-exit, el mismo escenario de
 > VC-48a deja solo `%0` en `tm list-panes -F '#{pane_id}'` en menos de 5 s.
 
 ---
@@ -1303,8 +1347,10 @@ ambigüedad "bloqueado" de "no bloqueado" sin depender de la carga de la máquin
 
 ### NFR-2 · Cota de tiempo ante un destino que no responde
 
-Contra un destino que acepta TCP y no responde, el pane SSH termina **entre 30 y 35 s**
-después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
+El plazo de conexión es de **30 s**, desde que empieza el hijo hasta que la shell
+remota queda abierta (D-12). Contra un destino que acepta TCP y no responde, el pane
+SSH termina **entre 30 y 35 s** después de que se ejecuta `ssh-pane`, con el mensaje
+de FR-47.
 
 > **VC-NFR-2** — Con remain-on-exit, se registra el instante `t0` antes de
 > `tm ssh-pane -t %0 -p 2223 tester@127.0.0.1` y se lee el estado de `%1` cada 0,2 s
@@ -1330,7 +1376,8 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | FR-10 | D-7 | VC-10 | feliz |
 | FR-11 | D-7 | VC-11 | feliz |
 | FR-12 | D-7 | VC-12 | feliz |
-| FR-13 | D-7 | VC-13 | borde (`USER`) |
+| FR-13a | D-7 | VC-13a | borde (`USER`) |
+| FR-13b | D-7 + revisión (UID sin cuenta) | VC-13b | falla (sin cuenta) |
 | FR-14 | D-7 | VC-14 | feliz |
 | FR-15 | D-7 | VC-15 | falla |
 | FR-16 | D-7 | VC-16 | falla (sin valor) |
@@ -1393,6 +1440,7 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | BR-2 | D-9 | VC-BR-2 | invariante |
 | BR-3a | D-10 | VC-BR-3a | borde |
 | BR-3b | D-10 | VC-BR-3b | borde (sin `HOME`) |
+| BR-3c | D-10 + revisión (UID sin cuenta) | VC-BR-3c | falla (sin `HOME` ni cuenta) |
 | BR-4 | D-8 | VC-BR-4 | invariante |
 | BR-5 | D-12 | VC-BR-5 | invariante |
 | INV-1 | Pedido + D-6, D-15 | VC-INV-1 | invariante (build) |
@@ -1407,7 +1455,7 @@ después de que se ejecuta `ssh-pane`, con el mensaje de FR-47.
 | NFR-1 | Hallazgo 3 + D-1 | VC-NFR-1 | medición |
 | NFR-2 | D-12 | VC-NFR-2 | medición |
 
-**89 requerimientos (72 FR, 6 BR, 9 INV, 2 NFR), 89 VCs, 0 huérfanos.**
+**91 requerimientos (73 FR, 7 BR, 9 INV, 2 NFR), 91 VCs, 0 huérfanos.**
 
 ## Preguntas abiertas
 
@@ -1431,5 +1479,5 @@ corren al cerrar el incremento 1 y de nuevo al cerrar el último.
 
 El incremento 1 es el más angosto que se puede ejercitar solo: prueba el límite
 solo-Linux (lo que más riesgo tiene de romper builds ajenos) antes de escribir una línea
-de SSH. El plan (`ssh-pane-plan.md`) detalla cada incremento; no puede cambiar este
-orden sin volver a Revisar.
+de SSH. El plan, cuando se haga, detalla cada incremento y no puede cambiar este orden
+sin volver a Revisar.

@@ -239,7 +239,8 @@ cualquier diferencia entre versiones de tmux.
 - `-p`: el puerto, un entero entre 1 y 65535 escrito solo con dígitos decimales. Por
   defecto, 22.
 - `[user@]host`: exactamente un argumento. Sin `user@`, el usuario es el nombre de la
-  cuenta local del proceso (`getpwuid(getuid())`), no `$USER`, igual que `ssh`.
+  cuenta local del proceso (`getpwuid(getuid())`), no `$USER`, igual que `ssh`. Si la
+  UID no tiene cuenta, el comando falla sin crear el pane, también como `ssh`.
 - `host` no puede contener `:`: los literales IPv6 (`::1`, `[::1]`) se rechazan como
   destino inválido. Un nombre que resuelva a una dirección IPv6 sí se acepta.
 - No crea panes flotantes: no tiene los flags de `new-pane`, y si el pane objetivo es
@@ -290,6 +291,7 @@ Los datos de conexión viajan en `spawn_context` y quedan en el pane (D-13), nun
 | Datos de conexión en `sc.argv` | `spawn_pane` los trataría como comando local, les aplicaría `default-command` y los registraría como `cmd=` (hallazgo 2) |
 | Hook `after-ssh-pane` | Cada hook `after-<comando>` es una entrada de `options-table.c` (`OPTIONS_TABLE_AFTER_HOOK`, `options-table.c:273-275,1932`); sin ella, `set-hook` lo rechaza con `invalid option`. Sumarlo toca un archivo de OpenBSD más, sin pedido concreto |
 | Disparar `after-split-window` | El hook promete que corrió `split-window`; un script que lo escuche recibiría un pane que no pidió |
+| Con una UID sin cuenta, usar `$USER` como respaldo | Es la variable que esta decisión evita: cualquiera la cambia con `set-environment`, y se conectaría como otra cuenta sin pedirlo |
 
 ### D-8 · Verificación de la clave del host
 
@@ -357,7 +359,8 @@ clientes de control, hallazgo 3).
 
 **Elegido:** `<dir-ssh>` es `$HOME/.ssh`, con `HOME` tomado del entorno del pane
 (`environ_for_session`, `environ.c:251-269`). Si `HOME` no está definido en ese
-entorno, se usa el directorio de la cuenta local (`getpwuid(getuid())`).
+entorno, se usa el directorio de la cuenta local (`getpwuid(getuid())`). Si tampoco
+hay cuenta, no hay `<dir-ssh>`: el hijo termina con error sin conectar.
 
 **Fundamento:** el hijo ya tiene instalado el entorno del pane (`environ_push`,
 `spawn.c:544`), y así el entorno de prueba controla `known_hosts` y las claves
@@ -370,6 +373,7 @@ tmux para la shell por defecto.
 |---|---|
 | Siempre `getpwuid` | No se puede aislar en pruebas sin tocar `/etc/passwd` |
 | Dejar la elección por defecto de `libssh` | Depende de la versión de la biblioteca: la spec no podría fijar el comportamiento |
+| Sin `HOME` ni cuenta, usar `/` o el directorio actual | Leería claves y `known_hosts` de un lugar que la persona no eligió |
 
 ### D-11 · La sesión remota
 
