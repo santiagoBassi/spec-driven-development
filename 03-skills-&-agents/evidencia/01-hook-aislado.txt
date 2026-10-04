@@ -1,0 +1,89 @@
+
+=== Caso 1 · Edit que agrega FR-3 sin su VC (esperado: exit 2)
+EDICIÓN BLOQUEADA — esta escritura deja la spec con requisitos sin VC.
+vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+  - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Agregá el VC que falta (o sacá el que sobra) en la misma edición y volvé a escribir.
+--> exit=2 OK
+
+=== Caso 2 · Edit que agrega FR-3 con VC-3 (esperado: exit 0)
+--> exit=0 OK
+
+=== Caso 3 · Write de una spec nueva con un VC que no verifica nada (esperado: exit 2)
+EDICIÓN BLOQUEADA — esta escritura deja la spec con requisitos sin VC.
+vc-coverage: sdd/nueva-spec.md — la cobertura de VCs está rota.
+  - VC-INV-1 no verifica ningún requisito: no hay un encabezado 'INV-1'.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Agregá el VC que falta (o sacá el que sobra) en la misma edición y volvé a escribir.
+--> exit=2 OK
+
+=== Caso 4 · Write de un archivo que no es *-spec.md (esperado: exit 0)
+--> exit=0 OK
+
+=== Caso 5 · Bash que no es un commit (esperado: exit 0)
+--> exit=0 OK
+
+=== Caso 6 · git add y git commit en un solo comando (el escape que encontró la sesión s3) (esperado: exit 2)
+COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
+vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+  - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
+
+=== Caso 7 · git commit -am dentro de bash -c (esperado: exit 2)
+COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
+vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+  - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
+
+=== Caso 8 · git commit con la spec rota en staging (esperado: exit 2)
+COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
+vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+  - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
+
+=== Caso 9 · git commit -am: staging roto, disco corregido (entra lo de disco) (esperado: exit 0)
+--> exit=0 OK
+
+=== Caso 10 · git commit sin -a: staging sigue roto (esperado: exit 2)
+COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
+vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+  - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
+
+=== Caso 11 · git commit con la spec corregida en staging (esperado: exit 0)
+--> exit=0 OK
+
+=== Caso 12 · Write de un *-spec.md bajo .claude/ (el subagent review-spec.md no es una spec) (esperado: exit 0)
+--> exit=0 OK
+
+=== Caso 13 · spec nueva sin trackear, rota, con git add -A && git commit (esperado: exit 2)
+COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
+vc-coverage: sdd/otra-spec.md — la cobertura de VCs está rota.
+  - FR-1 no tiene VC: falta un '**VC-1**' que lo verifique.
+vc-coverage: sdd/demo-spec.md — OK, 4 requisitos con su VC.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
