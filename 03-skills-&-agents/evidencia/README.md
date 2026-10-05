@@ -9,20 +9,24 @@ Todo lo de esta carpeta salió de **correr** las piezas, no de describirlas.
   Corrieron en un **clon descartable** de este repo con el toolkit copiado (`<sandbox>`
   en las transcripciones; su commit base `22104ba` es `7ab4425` más el toolkit), así los
   commits de la demo no ensuciaron este repo.
+- Las sesiones 02 a 05 se grabaron con el toolkit en la raíz del repo, antes de moverlo
+  a `03-skills-&-agents/`. Por eso ahí los paths dicen `03-skills-&-agents/evidencia/…`
+  y `.claude/…`. La sesión 06 repite el veto con el toolkit ya movido y la sesión
+  abierta en `03-skills-&-agents/` (ver sección 6).
 - Las transcripciones salen del `stream-json` de cada sesión. Muestran cada tool call y
   su resultado (recortado), los bloqueos completos y, marcado con `│ [subagent]`, lo que
   pasó **dentro** de cada subagent.
 
 ## 1 · El hook bloquea, en aislamiento
 
-[`01-hook-aislado.txt`](./01-hook-aislado.txt) tiene **13 casos, 13 OK**: 8 vetos
-(`exit 2`) y 5 pasan (`exit 0`).
+[`01-hook-aislado.txt`](./01-hook-aislado.txt) tiene **13 casos, 13 OK**: 7 vetos
+(`exit 2`) y 6 pasan (`exit 0`).
 
 | Bloquea | Pasa |
 |---|---|
 | `Edit` que agrega un FR sin VC · `Write` de una spec con un VC huérfano · `git commit` con la spec rota en staging · `git add … && git commit` en un solo comando · `bash -c "git commit -am …"` · `git commit -a` sin `-a` cuando el staging sigue roto · una spec nueva sin trackear con `git add -A && git commit` | `Edit` que agrega FR y VC juntos · archivos que no son `*-spec.md` · un `*-spec.md` bajo `.claude/` (como `agents/review-spec.md`) · `Bash` que no es un commit · `git commit -am` cuando el disco ya está corregido |
 
-Para reproducirlo: `03-skills-\&-agents/evidencia/probar-hook.sh` desde la raíz.
+Para reproducirlo, desde `03-skills-&-agents/`: `evidencia/probar-hook.sh`.
 
 ## 2 · El skill dispara solo, y el subagent revisa en su ventana
 
@@ -116,3 +120,20 @@ Esto no salió como lo planeamos, y por eso vale más. Para todas estas sesiones
 
 **Señal de que salió** (la del ejemplo guiado): el hook bloqueó, y el agente usó el
 mensaje de stderr para corregir el camino en vez de reintentar.
+
+## 6 · Con el toolkit dentro de `03-skills-&-agents/`
+
+[`06-desde-03-hook-veta`](./sesiones/06-desde-03-hook-veta.md) · Después de mover
+`.claude/` y `CLAUDE.md` a esta carpeta, abrimos la sesión en `03-skills-&-agents/`
+de un clon descartable:
+
+- **Se registran solos.** El evento `init` de la sesión lista el skill `write-spec` y
+  el subagent `review-spec`.
+- **El hook veta.** Con un FR-18 sin VC en la spec de la demo, le pedimos el commit y
+  la respuesta fue `PreToolUse:Bash` → **`COMMIT BLOQUEADO`** (`FR-18 no tiene VC`).
+  No se creó ningún commit.
+
+Mover el toolkit destapó un detalle. Git da las rutas relativas a la raíz del repo,
+pero la sesión (`$CLAUDE_PROJECT_DIR`) ahora está en una subcarpeta, así que el chequeo
+de commit pasó a trabajar desde la raíz. `probar-hook.sh` ahora arma el sandbox con el
+toolkit en una subcarpeta, para probar exactamente este caso.

@@ -62,7 +62,9 @@ case "$TOOL" in
   Bash)
     CMD="$(printf '%s' "$EVENT" | jq -r '.tool_input.command // ""')"
     printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]"'"'"'(`])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+commit([[:space:]"'"'"';)]|$)' || exit 0
-    cd "$PROJECT_DIR" || exit 1
+    # Git da las rutas relativas a la raíz del repo, aunque la sesión esté abierta en
+    # una subcarpeta (03-skills-&-agents/): se trabaja desde la raíz.
+    cd "$PROJECT_DIR" && cd "$(git rev-parse --show-toplevel)" || exit 1
     # El hook corre ANTES del comando entero: en `git add x && git commit` o en
     # `git commit -a`, lo que va a entrar todavía está en disco, no en staging.
     # En esos casos se chequea la versión en disco de toda spec modificada o nueva.

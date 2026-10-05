@@ -11,18 +11,27 @@ pedido ──▶ write-spec (skill) ──▶ vc-coverage.sh ──▶ review-sp
                  └── correr en cada escritura y en cada commit, y veta
 ```
 
-Todo vive en `.claude/` en la raíz del repo, que es donde Claude Code lo busca: se
-carga solo al abrir una sesión en el repo, sin instalar nada.
+Todo vive en esta carpeta: `.claude/` (skill, subagent, hook y `settings.json`) y
+`CLAUDE.md` (la rule). Claude Code los busca en la carpeta donde se abre la sesión,
+así que **la sesión se abre en `03-skills-&-agents/`**:
+
+```bash
+cd 03-skills-\&-agents && claude
+```
+
+Desde ahí se carga todo solo, sin instalar nada, y el agente igual puede leer las
+otras entregas en `../01-*` y `../02-*`. Si se abre la sesión en la raíz del repo, el
+toolkit no se carga.
 
 ## Las piezas
 
 | Pieza | Archivo | Concepto de L1–L2 que encodea | ¿Persuade o garantiza? |
 |---|---|---|---|
-| 📘 Skill `write-spec` | [`.claude/skills/write-spec/SKILL.md`](../.claude/skills/write-spec/SKILL.md) | **Cobertura de VCs** (un VC por requisito, con su ID), **alcance acotado** (Dentro/Fuera por archivo), **seguridad ante regresiones** (línea de base + invariantes) | Persuade |
-| 🔧 Script `vc-coverage.sh` | [`.claude/skills/write-spec/scripts/vc-coverage.sh`](../.claude/skills/write-spec/scripts/vc-coverage.sh) | **Cobertura de VCs**, chequeada por código y no a ojo | Determinístico |
-| 👥 Subagent `review-spec` | [`.claude/agents/review-spec.md`](../.claude/agents/review-spec.md) | **Revisión independiente** (el gate de la TP1) e **higiene de contexto** | Persuade; `tools` garantiza el solo lectura |
-| 🪝 Hook `spec-vc-gate` | [`.claude/hooks/spec-vc-gate.sh`](../.claude/hooks/spec-vc-gate.sh) · [`.claude/settings.json`](../.claude/settings.json) | **Cobertura de VCs**, garantizada: ninguna spec con un requisito sin VC se escribe ni se commitea | **Garantiza** (`exit 2`) |
-| 📏 Rule | [`CLAUDE.md`](../CLAUDE.md) | **Spec antes que código** y **trazabilidad** commit → spec → ID | Persuade |
+| 📘 Skill `write-spec` | [`.claude/skills/write-spec/SKILL.md`](./.claude/skills/write-spec/SKILL.md) | **Cobertura de VCs** (un VC por requisito, con su ID), **alcance acotado** (Dentro/Fuera por archivo), **seguridad ante regresiones** (línea de base + invariantes) | Persuade |
+| 🔧 Script `vc-coverage.sh` | [`.claude/skills/write-spec/scripts/vc-coverage.sh`](./.claude/skills/write-spec/scripts/vc-coverage.sh) | **Cobertura de VCs**, chequeada por código y no a ojo | Determinístico |
+| 👥 Subagent `review-spec` | [`.claude/agents/review-spec.md`](./.claude/agents/review-spec.md) | **Revisión independiente** (el gate de la TP1) e **higiene de contexto** | Persuade; `tools` garantiza el solo lectura |
+| 🪝 Hook `spec-vc-gate` | [`.claude/hooks/spec-vc-gate.sh`](./.claude/hooks/spec-vc-gate.sh) · [`.claude/settings.json`](./.claude/settings.json) | **Cobertura de VCs**, garantizada: ninguna spec con un requisito sin VC se escribe ni se commitea | **Garantiza** (`exit 2`) |
+| 📏 Rule | [`CLAUDE.md`](./CLAUDE.md) | **Spec antes que código** y **trazabilidad** commit → spec → ID | Persuade |
 
 ### 📘 `write-spec` — el flujo
 
@@ -74,7 +83,7 @@ faltan y dice qué hacer, así el agente corrige en vez de reintentar.
 
 ### 📏 La rule
 
-[`CLAUDE.md`](../CLAUDE.md) fija lo que vale en toda sesión: no se escribe código sin
+[`CLAUDE.md`](./CLAUDE.md) fija lo que vale en toda sesión: no se escribe código sin
 una spec con veredicto `LISTA`, y cada commit referencia su spec y sus IDs. No pega
 el flujo (eso es el skill): apunta a él.
 
@@ -96,10 +105,10 @@ Detalle completo en [`evidencia/README.md`](./evidencia/README.md).
 
 | Pieza | Qué se ve | Dónde |
 |---|---|---|
-| 🪝 Hook, aislado | 13 casos, 13 OK: 8 vetos (`exit 2`) y 5 que pasan | [`01-hook-aislado.txt`](./evidencia/01-hook-aislado.txt) · [`probar-hook.sh`](./evidencia/probar-hook.sh) |
+| 🪝 Hook, aislado | 13 casos, 13 OK: 7 vetos (`exit 2`) y 6 que pasan | [`01-hook-aislado.txt`](./evidencia/01-hook-aislado.txt) · [`probar-hook.sh`](./evidencia/probar-hook.sh) |
 | 📘 Skill | Un pedido que no lo nombra → la primera tool call es `Skill write-spec`. Los 5 casos de disparo (2 sí, 3 no) dan lo esperado | [`02`](./evidencia/sesiones/02-skill-y-subagent.md) · [`03a–03e`](./evidencia/sesiones/) |
 | 👥 Subagent | `review-spec`: `HUECOS (5)` → `(4)` → `(6)` → `(2)` → `LISTA`. Cada vuelta, 62k a 88k tokens en su ventana y 5k a 7k caracteres de vuelta; solo `Read`/`Grep`/`Glob` | [`02`](./evidencia/sesiones/02-skill-y-subagent.md) · [spec resultante](./evidencia/demo/invert-match-spec.md) |
-| 🪝 Hook, en sesión real | `COMMIT BLOQUEADO` y `EDICIÓN BLOQUEADA`; el agente parte del stderr y corrige el camino | [`05a`](./evidencia/sesiones/05a-hook-veta-commit-y-edit.md) · [`05b`](./evidencia/sesiones/05b-agente-lee-stderr.md) · [`05c`](./evidencia/sesiones/05c-edicion-que-restaura-pasa.md) |
+| 🪝 Hook, en sesión real | `COMMIT BLOQUEADO` y `EDICIÓN BLOQUEADA`; el agente parte del stderr y corrige el camino | [`05a`](./evidencia/sesiones/05a-hook-veta-commit-y-edit.md) · [`05b`](./evidencia/sesiones/05b-agente-lee-stderr.md) · [`05c`](./evidencia/sesiones/05c-edicion-que-restaura-pasa.md) · [`06`](./evidencia/sesiones/06-desde-03-hook-veta.md), con la sesión abierta en `03-skills-&-agents/` |
 
 **Lo que encontramos al ejercitarlo.** Con 9 casos en verde, el hook se escapó en la
 primera sesión real: el agente commiteó con `git add` y `git commit` en un solo
@@ -114,15 +123,15 @@ siempre: por eso existe el hook.
 
 ### Para la demo en vivo
 
-En una sesión de Claude Code abierta en la raíz del repo:
+En una sesión de Claude Code abierta en `03-skills-&-agents/`:
 
 1. Romper la spec de la demo "como un compañero", sin pasar por el agente (desde la
    terminal):
-   `printf '\n#### FR-18 · Contar con -v -c\nDado … Cuando … Entonces …\n' >> "03-skills-&-agents/evidencia/demo/invert-match-spec.md"`
+   `printf '\n#### FR-18 · Contar con -v -c\nDado … Cuando … Entonces …\n' >> "evidencia/demo/invert-match-spec.md"`
 2. Pedirle al agente: *"Para probar el guardrail, agregá esa spec al staging y
    commiteala tal cual, con el mensaje 'FR-18'."* → `COMMIT BLOQUEADO — … FR-18 no
    tiene VC`.
-3. Dejar la spec como estaba: `git checkout -- "03-skills-&-agents/evidencia/demo/invert-match-spec.md"`.
+3. Dejar la spec como estaba: `git checkout -- "evidencia/demo/invert-match-spec.md"`.
 
 ## Limitaciones conocidas
 

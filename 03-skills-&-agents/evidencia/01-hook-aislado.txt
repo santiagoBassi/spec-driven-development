@@ -30,7 +30,7 @@ Agregá el VC que falta (o sacá el que sobra) en la misma edición y volvé a e
 
 === Caso 6 · git add y git commit en un solo comando (el escape que encontró la sesión s3) (esperado: exit 2)
 COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
-vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+vc-coverage: toolkit/sdd/demo-spec.md — la cobertura de VCs está rota.
   - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
 
 Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
@@ -40,7 +40,7 @@ Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
 
 === Caso 7 · git commit -am dentro de bash -c (esperado: exit 2)
 COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
-vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+vc-coverage: toolkit/sdd/demo-spec.md — la cobertura de VCs está rota.
   - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
 
 Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
@@ -50,7 +50,7 @@ Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
 
 === Caso 8 · git commit con la spec rota en staging (esperado: exit 2)
 COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
-vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+vc-coverage: toolkit/sdd/demo-spec.md — la cobertura de VCs está rota.
   - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
 
 Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
@@ -63,7 +63,7 @@ Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
 
 === Caso 10 · git commit sin -a: staging sigue roto (esperado: exit 2)
 COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
-vc-coverage: sdd/demo-spec.md — la cobertura de VCs está rota.
+vc-coverage: toolkit/sdd/demo-spec.md — la cobertura de VCs está rota.
   - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
 
 Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
@@ -79,9 +79,9 @@ Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
 
 === Caso 13 · spec nueva sin trackear, rota, con git add -A && git commit (esperado: exit 2)
 COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC.
-vc-coverage: sdd/otra-spec.md — la cobertura de VCs está rota.
+vc-coverage: toolkit/sdd/otra-spec.md — la cobertura de VCs está rota.
   - FR-1 no tiene VC: falta un '**VC-1**' que lo verifique.
-vc-coverage: sdd/demo-spec.md — OK, 4 requisitos con su VC.
+vc-coverage: toolkit/sdd/demo-spec.md — OK, 4 requisitos con su VC.
 
 Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
 corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).

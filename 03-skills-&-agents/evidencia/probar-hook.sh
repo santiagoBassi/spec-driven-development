@@ -3,12 +3,16 @@
 # (es lo que hace Claude Code). Arma un repo descartable en un directorio temporal,
 # así que no toca este repo. Salida esperada: la de 01-hook-aislado.txt.
 #
-# Uso, desde la raíz del repo:  03-skills-\&-agents/evidencia/probar-hook.sh
+# Como en este repo, el toolkit vive en una SUBCARPETA del repo (la sesión se abre ahí
+# y CLAUDE_PROJECT_DIR apunta a ella): <repo>/toolkit/.claude, <repo>/toolkit/sdd.
+#
+# Uso, desde 03-skills-&-agents/:  evidencia/probar-hook.sh
 set -uo pipefail
 
-REPO="$(git rev-parse --show-toplevel)"
-SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
-mkdir -p "$SB/sdd" && cp -R "$REPO/.claude" "$SB/" && cd "$SB" && git init -q
+TOOLKIT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_SB="$(mktemp -d)"; trap 'rm -rf "$REPO_SB"' EXIT
+SB="$REPO_SB/toolkit"
+mkdir -p "$SB/sdd" && cp -R "$TOOLKIT/.claude" "$SB/" && git -C "$REPO_SB" init -q && cd "$SB"
 
 cat > sdd/demo-spec.md <<'EOF'
 # demo — spec
