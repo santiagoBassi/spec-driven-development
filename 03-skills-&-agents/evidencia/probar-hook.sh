@@ -70,3 +70,38 @@ caso 12 "Write de un *-spec.md bajo .claude/ (el subagent review-spec.md no es u
 
 printf '#### FR-1 · a\n' > sdd/otra-spec.md
 caso 13 "spec nueva sin trackear, rota, con git add -A && git commit" 2 "$(bash_ev 'git add -A && git commit -m otra')"
+
+# --- Casos 14 a 27: los escapes que encontró la auditoría del toolkit. ---
+rm sdd/otra-spec.md
+git -c user.name=t -c user.email=t@t commit -qm "feat: -v"   # staging y disco limpios
+
+caso 14 "Write de una spec con los requisitos en lista (ninguno declarado como encabezado)" 2 \
+  "$(jq -nc --arg f "$SB/sdd/lista-spec.md" '{tool_name:"Write",tool_input:{file_path:$f,content:"- **FR-1**: buscar\n- **FR-2**: informar\n"}}')"
+caso 15 "Edit que agrega un bloque de código con un '#### FR-9' de ejemplo" 0 \
+  "$(edit '### BR-1' $'```md\n#### FR-9 · ejemplo de formato\n```\n\n### BR-1')"
+caso 16 "Edit que cita **VC-1** en prosa (una mención no es una declaración)" 0 \
+  "$(edit '### BR-1' $'Nota: **VC-1** y **VC-2** comparten fixture.\n\n### BR-1')"
+
+# La spec queda rota en disco, sin agregar al staging.
+printf '\n#### FR-4 · Contar con -c\nDado … Cuando … Entonces …\n' >> sdd/demo-spec.md
+caso 17 "git commit con pathspec (entra la versión en disco)" 2 "$(bash_ev 'git commit -m "feat: -c" sdd/demo-spec.md')"
+caso 18 "git -c k=v commit -am" 2 "$(bash_ev 'git -c user.name=x commit -am "feat: -c"')"
+caso 19 "git --no-pager commit -am" 2 "$(bash_ev 'git --no-pager commit -am "feat: -c"')"
+caso 20 "git -C con un directorio con espacios, entre comillas" 2 "$(bash_ev 'git -C "/tmp/un dir con espacios" commit -am "feat: -c"')"
+caso 21 "/usr/bin/git commit -am" 2 "$(bash_ev '/usr/bin/git commit -am "feat: -c"')"
+caso 22 "git stage y git commit en un solo comando" 2 "$(bash_ev 'git stage sdd/demo-spec.md && git commit -m "feat: -c"')"
+caso 23 "git commit sin -a: disco roto, staging sano (falso positivo conservador)" 2 "$(bash_ev 'git commit -m "otra cosa"')"
+
+git checkout -- sdd/demo-spec.md
+caso 24 "git -c k=v commit -am con todo en orden" 0 "$(bash_ev 'git -c user.name=x commit -am "feat: -c"')"
+
+printf '#### FR-1 · a\n' > sdd/autenticación-spec.md
+caso 25 "spec nueva con acento en el nombre, rota, con git add -A && git commit" 2 "$(bash_ev 'git add -A && git commit -m auth')"
+git add -A
+caso 26 "la misma spec, ya en staging" 2 "$(bash_ev 'git commit -m auth')"
+git rm -q --cached sdd/autenticación-spec.md && rm sdd/autenticación-spec.md
+
+git mv sdd/demo-spec.md sdd/renombrada-spec.md
+printf '\n#### FR-4 · Contar con -c\nDado … Cuando … Entonces …\n' >> sdd/renombrada-spec.md
+git add -A
+caso 27 "spec renombrada y rota, en staging (git la ve como rename)" 2 "$(bash_ev 'git commit -m rename')"

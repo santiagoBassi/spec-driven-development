@@ -2,10 +2,11 @@
 # spec-vc-gate.sh — no entra una spec con un requisito sin VC.
 #
 # Evento: PreToolUse.
-#   - matcher "Edit|Write": si el archivo es un *-spec.md, arma el contenido como
-#     quedaría después de la edición y lo chequea. Bloquea antes de escribir.
+#   - matcher "Edit|Write|MultiEdit": si el archivo es un *-spec.md, arma el contenido
+#     como quedaría después de la edición y lo chequea. Bloquea antes de escribir.
 #   - matcher "Bash": si el comando es un `git commit`, chequea cada *-spec.md que
-#     entra en el commit (lo que está en staging). Bloquea el commit.
+#     puede entrar en el commit: la versión en disco de toda spec modificada o nueva,
+#     y la versión en staging. Bloquea el commit.
 # El chequeo es .claude/skills/write-spec/scripts/vc-coverage.sh: el mismo script que
 # el skill corre para chequearse. El skill persuade; este hook garantiza.
 #
@@ -15,7 +16,16 @@
 set -uo pipefail
 
 EVENT="$(cat)"
-command -v jq >/dev/null 2>&1 || { echo "spec-vc-gate: falta jq" >&2; exit 1; }
+if ! command -v jq >/dev/null 2>&1; then
+  # Sin jq no se puede leer el evento. Si puede ser una spec o un commit, se veta:
+  # un guardrail que falla abierto no garantiza nada.
+  case "$EVENT" in
+    *-spec.md*|*commit*)
+      echo "spec-vc-gate: falta jq, no puedo chequear la cobertura de VCs. Instalá jq y reintentá." >&2
+      exit 2 ;;
+  esac
+  exit 0
+fi
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 CHECK="$PROJECT_DIR/.claude/skills/write-spec/scripts/vc-coverage.sh"
@@ -36,7 +46,8 @@ ERR="$(mktemp)"; trap 'rm -f "$ERR"' EXIT
 
 # Una spec es un *-spec.md fuera de .claude/ (ahí viven write-spec, review-spec.md, …).
 is_spec() { case "$1" in .claude/*|*/.claude/*) return 1 ;; *-spec.md) return 0 ;; *) return 1 ;; esac; }
-specs() { while IFS= read -r f; do is_spec "$f" && printf '%s\n' "$f"; done; }
+# Lee rutas separadas por NUL (git -z: sin comillas ni escapes, aunque tengan acentos).
+specs() { tr '\0' '\n' | while IFS= read -r f; do is_spec "$f" && printf '%s\n' "$f"; done; }
 
 case "$TOOL" in
   Edit|Write|MultiEdit)
@@ -56,35 +67,46 @@ case "$TOOL" in
         else reduce $t.edits[] as $e ($cur; apply(.; $e)) end' 2>/dev/null)" \
       || AFTER="$(printf '%s' "$EVENT" | jq -r '.tool_input.content // ""')"   # Write de un archivo nuevo
     printf '%s\n' "$AFTER" | "$CHECK" - "${FILE#"$PROJECT_DIR"/}" 2>"$ERR" && exit 0
-    block "EDICIÓN BLOQUEADA — esta escritura deja la spec con requisitos sin VC." \
+    block "EDICIÓN BLOQUEADA — así como quedaría, la spec no pasa la cobertura de VCs." \
           "Agregá el VC que falta (o sacá el que sobra) en la misma edición y volvé a escribir."
     ;;
   Bash)
     CMD="$(printf '%s' "$EVENT" | jq -r '.tool_input.command // ""')"
-    printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]"'"'"'(`])git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+commit([[:space:]"'"'"';)]|$)' || exit 0
+    # `git commit`, con opciones globales en el medio (`git -c k=v commit`,
+    # `git -C "un dir" commit`, `git --no-pager commit`) o con ruta (`/usr/bin/git`).
+    Q="\"'"
+    OPT="[[:space:]]+-[^[:space:]]*([[:space:]]+(\"[^\"]*\"|'[^']*'|[^-[:space:]][^[:space:]]*))?"
+    printf '%s' "$CMD" | grep -qE "(^|[;&|[:space:]$Q(\`{/])git($OPT)*[[:space:]]+commit([[:space:]$Q;)]|\$)" || exit 0
     # Git da las rutas relativas a la raíz del repo, aunque la sesión esté abierta en
     # una subcarpeta (03-skills-&-agents/): se trabaja desde la raíz.
     cd "$PROJECT_DIR" && cd "$(git rev-parse --show-toplevel)" || exit 1
-    # El hook corre ANTES del comando entero: en `git add x && git commit` o en
-    # `git commit -a`, lo que va a entrar todavía está en disco, no en staging.
-    # En esos casos se chequea la versión en disco de toda spec modificada o nueva.
-    DISK=""
-    if printf '%s' "$CMD" | grep -qE 'git[[:space:]]+add|[[:space:]](-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|$)'; then
-      DISK="$( { git diff --name-only --diff-filter=AM; git ls-files --others --exclude-standard; } \
-               | specs | sort -u)"
-    fi
-    STAGED="$(git diff --cached --name-only --diff-filter=AM | specs)"
+    # El hook corre ANTES del comando entero, y no sabe qué va a entrar: con
+    # `git add x && git commit`, `git commit -a` o `git commit <archivo>` entra lo que
+    # está en disco, no lo que está en staging. Por eso se chequea SIEMPRE la versión
+    # en disco de toda spec modificada o nueva, además de la que está en staging.
+    DISK="$( { git diff -z --name-only --diff-filter=ACMR; git ls-files -z --others --exclude-standard; } \
+             | specs | sort -u)"
+    STAGED="$(git diff -z --cached --name-only --diff-filter=ACMR | specs)"
+    # Si el comando agrega al staging (`git add`, `git stage`, `-a`), lo de disco pisa
+    # a lo de staging: de esas specs alcanza con la versión en disco.
+    ADDS=0
+    printf '%s' "$CMD" | grep -qE 'git[[:space:]]+(add|stage)|[[:space:]](-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|$)' && ADDS=1
     FAILED=0
-    for f in $DISK; do
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
       "$CHECK" "$f" 2>>"$ERR" || FAILED=1
-    done
-    # Lo que ya está en staging entra tal como está ahí (no como está en disco).
-    for f in $STAGED; do
-      printf '%s\n' "$DISK" | grep -qxF -- "$f" && continue
-      git show ":$f" | "$CHECK" - "$f" 2>>"$ERR" || FAILED=1
-    done
+    done <<EOF_DISK
+$DISK
+EOF_DISK
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      [ "$ADDS" = 1 ] && printf '%s\n' "$DISK" | grep -qxF -- "$f" && continue
+      git show ":$f" | "$CHECK" - "$f (en staging)" 2>>"$ERR" || FAILED=1
+    done <<EOF_STAGED
+$STAGED
+EOF_STAGED
     [ "$FAILED" = 0 ] && exit 0
-    block "COMMIT BLOQUEADO — una spec del commit tiene requisitos sin VC." \
+    block "COMMIT BLOQUEADO — una spec modificada no pasa la cobertura de VCs." \
           "Corregí la spec (skill write-spec), hacé git add y volvé a commitear."
     ;;
 esac

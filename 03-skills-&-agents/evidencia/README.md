@@ -4,8 +4,10 @@ Todo lo de esta carpeta salió de **correr** las piezas, no de describirlas.
 
 - **El hook en aislamiento** se ejercita con [`probar-hook.sh`](./probar-hook.sh): le
   pasa eventos por stdin a `spec-vc-gate.sh` y es reproducible.
-- **Las sesiones** son de Claude Code (`claude -p`, modelo `claude-opus-5-5`, permisos
-  en `bypassPermissions`), cada una arrancada en limpio salvo las que dicen "continúa".
+- **Las sesiones** son de Claude Code (`claude -p`, permisos en `bypassPermissions`),
+  cada una arrancada en limpio salvo las que dicen "continúa". El modelo figura en la
+  primera línea de cada transcripción: `claude-opus-5-5` en las 02 a 05 y
+  `claude-opus-4-8` en la 06.
   Corrieron en un **clon descartable** de este repo con el toolkit copiado (`<sandbox>`
   en las transcripciones; su commit base `22104ba` es `7ab4425` más el toolkit), así los
   commits de la demo no ensuciaron este repo.
@@ -15,18 +17,22 @@ Todo lo de esta carpeta salió de **correr** las piezas, no de describirlas.
   abierta en `03-skills-&-agents/` (ver sección 6).
 - Las transcripciones salen del `stream-json` de cada sesión. Muestran cada tool call y
   su resultado (recortado), los bloqueos completos y, marcado con `│ [subagent]`, lo que
-  pasó **dentro** de cada subagent.
+  pasó **dentro** de cada subagent. Arrancan en la primera acción del agente: el pedido
+  no está en la transcripción, está citado acá abajo, en cada sección.
 
 ## 1 · El hook bloquea, en aislamiento
 
-[`01-hook-aislado.txt`](./01-hook-aislado.txt) tiene **13 casos, 13 OK**: 7 vetos
-(`exit 2`) y 6 pasan (`exit 0`).
+[`01-hook-aislado.txt`](./01-hook-aislado.txt) tiene **27 casos, 27 OK**: 18 vetos
+(`exit 2`) y 9 pasan (`exit 0`).
 
 | Bloquea | Pasa |
 |---|---|
-| `Edit` que agrega un FR sin VC · `Write` de una spec con un VC huérfano · `git commit` con la spec rota en staging · `git add … && git commit` en un solo comando · `bash -c "git commit -am …"` · `git commit -a` sin `-a` cuando el staging sigue roto · una spec nueva sin trackear con `git add -A && git commit` | `Edit` que agrega FR y VC juntos · archivos que no son `*-spec.md` · un `*-spec.md` bajo `.claude/` (como `agents/review-spec.md`) · `Bash` que no es un commit · `git commit -am` cuando el disco ya está corregido |
+| `Edit` que agrega un FR sin VC · `Write` de una spec con un VC huérfano · `Write` de una spec con los requisitos en lista · `git commit` con la spec rota en staging · `git add … && git commit` en un solo comando · `git stage … && git commit` · `bash -c "git commit -am …"` · `git commit <archivo>` · `git -c k=v commit`, `git --no-pager commit`, `git -C "dir con espacios" commit`, `/usr/bin/git commit` · `git commit` sin `-a` cuando el staging sigue roto · `git commit` sin `-a` con el disco roto (falso positivo conservador) · una spec nueva sin trackear con `git add -A && git commit` · una spec con acento en el nombre, sin trackear y en staging · una spec renombrada y rota | `Edit` que agrega FR y VC juntos · `Edit` que agrega un `#### FR-9` dentro de un bloque de código · `Edit` que cita un `**VC-1**` en prosa · archivos que no son `*-spec.md` · un `*-spec.md` bajo `.claude/` (como `agents/review-spec.md`) · `Bash` que no es un commit · `git commit -am` cuando el disco ya está corregido · `git -c k=v commit -am` con todo en orden |
 
 Para reproducirlo, desde `03-skills-&-agents/`: `evidencia/probar-hook.sh`.
+
+Los casos 1 a 13 son los de la primera versión. Los casos 14 a 27 salieron de auditar
+el hook buscándole escapes: todos pasaban (`exit 0`) con la spec rota antes de corregirlo.
 
 ## 2 · El skill dispara solo, y el subagent revisa en su ventana
 
@@ -45,10 +51,12 @@ código definamos bien qué tiene que hacer."* No nombra el skill.
   sesión principal corrigió la spec.
 - **Firewall de contexto, medido.** Cada vuelta de `review-spec` hizo **23 a 33 tool
   calls** y usó **62k a 88k tokens** en su propia ventana. A la sesión principal le
-  devolvió solo el veredicto, de **4,9k a 7k caracteres**.
+  devolvió solo el veredicto, de **4,9k a 7k caracteres**. Estas cifras salen del
+  `stream-json` de la sesión; en la transcripción cada devolución está recortada, así
+  que el veredicto entero no se ve ahí. Uno completo está en la sección 7.
 - **Solo lectura garantizado.** En las 5 vueltas, `review-spec` usó únicamente `Read`
-  (84), `Grep` (49) y `Glob` (8). Las 12 llamadas a `Bash` de la sesión son todas del
-  `Explore`.
+  (84), `Grep` (49) y `Glob` (8). Las 12 llamadas a `Bash` hechas por subagents son
+  todas del `Explore`.
 - **Resultado:** [`demo/invert-match-spec.md`](./demo/invert-match-spec.md), con 28
   requisitos (17 FR, 3 BR, 6 INV, 2 NFR), cada uno con su VC. Las notas de exploración
   están en [`demo/notas-exploracion.md`](./demo/notas-exploracion.md).
@@ -137,3 +145,20 @@ Mover el toolkit destapó un detalle. Git da las rutas relativas a la raíz del 
 pero la sesión (`$CLAUDE_PROJECT_DIR`) ahora está en una subcarpeta, así que el chequeo
 de commit pasó a trabajar desde la raíz. `probar-hook.sh` ahora arma el sandbox con el
 toolkit en una subcarpeta, para probar exactamente este caso.
+
+## 7 · El veredicto de `review-spec`, entero
+
+[`07-review-spec-veredicto-completo.md`](./sesiones/07-review-spec-veredicto-completo.md)
+· Volvimos a lanzar `review-spec` sobre la spec de la demo, en otra sesión, y guardamos
+la devolución sin recortar.
+
+- **Se ve el formato del brief**: `Veredicto`, la tabla de 7 ítems con evidencia y los
+  huecos con `archivo:línea`.
+- **Devolvió `HUECOS (3)`** sobre la misma spec que en la sesión 02 había terminado en
+  `LISTA`. Los tres huecos son reales (dos VCs de invariantes que pasan en vacío si la
+  suite no corre, y cambios de documentación sin requisito ni VC). No tocamos la spec
+  para forzar un `LISTA`.
+- **Qué nos deja:** el veredicto de un revisor que es un modelo cambia entre corridas.
+  Sirve para encontrar huecos, no para certificar que no hay más. Por eso `write-spec`
+  no puede apoyarse solo en él, y la cobertura mecánica la garantiza el hook.
+

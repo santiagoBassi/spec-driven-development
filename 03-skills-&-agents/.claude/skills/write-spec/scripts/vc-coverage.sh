@@ -8,9 +8,12 @@
 # Convención (la de 02-brownfield-tmux/sdd/ssh-pane-spec.md):
 #   - Un requisito se declara como encabezado:  "#### FR-12 · …", "### BR-3a · …",
 #     "### INV-1 · …", "### NFR-2 · …".
-#   - Su VC se declara en negrita, con el mismo ID: "**VC-12**", "**VC-BR-3a**",
-#     "**VC-INV-1**", "**VC-NFR-2**". Un VC de FR no lleva el prefijo FR-.
-#   Las menciones sueltas en el texto ("ver FR-12") no cuentan: solo las declaraciones.
+#   - Su VC se declara en negrita al comienzo de una línea (después de ">", "-" o
+#     espacios), con el mismo ID: "> **VC-12** — …", "**VC-BR-3a**", "**VC-INV-1**",
+#     "**VC-NFR-2**". Un VC de FR no lleva el prefijo FR-.
+#   Las menciones sueltas en el texto ("ver FR-12", "reemplaza a **VC-3**") no cuentan:
+#   solo las declaraciones. Lo que está dentro de un bloque de código (```) tampoco.
+#   Una spec sin ningún requisito declarado así no pasa: no hay nada que garantizar.
 #
 # Uso:  vc-coverage.sh <spec.md>
 #       vc-coverage.sh - <nombre>     (lee la spec por stdin; el nombre es para el reporte)
@@ -23,15 +26,28 @@ else
   NAME="${1:?uso: vc-coverage.sh <spec.md> | vc-coverage.sh - <nombre>}"; SPEC="$(cat "$1")" || exit 1
 fi
 
+# Fuera los bloques de código: un "#### FR-2" de ejemplo no es un requisito.
+SPEC="$(printf '%s\n' "$SPEC" | awk '/^[[:space:]]*(```|~~~)/ { f = !f; next } !f')"
+
 # FR-12 / BR-3a / INV-1 / NFR-2, tal como aparecen en los encabezados.
 REQS="$(printf '%s\n' "$SPEC" \
-  | grep -E '^#{2,5}[[:space:]]+(FR|BR|INV|NFR)-[0-9]+[a-z]?([^0-9a-z]|$)' \
-  | sed -E 's/^#{2,5}[[:space:]]+((FR|BR|INV|NFR)-[0-9]+[a-z]?).*/\1/' | sort)"
+  | grep -E '^#{2,5}[[:space:]]+(FR|BR|INV|NFR)-[0-9]+[A-Za-z]?([^0-9A-Za-z]|$)' \
+  | sed -E 's/^#{2,5}[[:space:]]+((FR|BR|INV|NFR)-[0-9]+[A-Za-z]?).*/\1/' | sort)"
 
-# **VC-12** → FR-12 · **VC-BR-3a** → BR-3a: el ID del requisito que dice verificar.
+if [ -z "$REQS" ]; then
+  {
+    echo "vc-coverage: $NAME — no declara ningún requisito."
+    echo "  - Cada requisito va como encabezado: '#### FR-1 · …', '### BR-1 · …', '### INV-1 · …', '### NFR-1 · …'."
+    echo "    En lista, en tabla o con el ID en negrita no se reconoce."
+  } >&2
+  exit 1
+fi
+
+# "> **VC-12** — …" → FR-12 · "> **VC-BR-3a** — …" → BR-3a: el ID del requisito que
+# dice verificar. Solo donde se declara: al comienzo de la línea.
 VCS="$(printf '%s\n' "$SPEC" \
-  | grep -oE '\*\*VC-((BR|INV|NFR)-)?[0-9]+[a-z]?\*\*' \
-  | sed -E 's/\*\*VC-([0-9].*)\*\*/FR-\1/; s/\*\*VC-(.*)\*\*/\1/' | sort)"
+  | sed -nE 's/^[[:space:]>*-]*\*\*VC-(((BR|INV|NFR)-)?[0-9]+[A-Za-z]?)\*\*.*/\1/p' \
+  | sed -E 's/^([0-9])/FR-\1/' | sort)"
 
 MISSING="$(comm -23 <(printf '%s\n' "$REQS" | sort -u) <(printf '%s\n' "$VCS" | sort -u) | grep . || true)"
 ORPHAN="$(comm -13 <(printf '%s\n' "$REQS" | sort -u) <(printf '%s\n' "$VCS" | sort -u) | grep . || true)"
