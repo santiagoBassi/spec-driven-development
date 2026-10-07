@@ -113,7 +113,7 @@ Detalle completo en [`evidencia/README.md`](./evidencia/README.md).
 
 | Pieza | Qué se ve | Dónde |
 |---|---|---|
-| 🪝 Hook, aislado | 27 casos, 27 OK: 18 vetos (`exit 2`) y 9 que pasan | [`01-hook-aislado.txt`](./evidencia/01-hook-aislado.txt) · [`probar-hook.sh`](./evidencia/probar-hook.sh) |
+| 🪝 Hook, aislado | 29 casos, 29 OK: 21 vetos (`exit 2`) y 8 que pasan | [`01-hook-aislado.txt`](./evidencia/01-hook-aislado.txt) · [`probar-hook.sh`](./evidencia/probar-hook.sh) |
 | 📘 Skill | Un pedido que no lo nombra → la primera tool call es `Skill write-spec`. Los 5 casos de disparo (2 sí, 3 no) dan lo esperado | [`02`](./evidencia/sesiones/02-skill-y-subagent.md) · [`03a–03e`](./evidencia/sesiones/) |
 | 👥 Subagent | `review-spec`: `HUECOS (5)` → `(4)` → `(6)` → `(2)` → `LISTA`. Cada vuelta, 62k a 88k tokens en su ventana y 5k a 7k caracteres de vuelta; solo `Read`/`Grep`/`Glob`. La devolución completa, sin recortar, está en la `07` | [`02`](./evidencia/sesiones/02-skill-y-subagent.md) · [`07`](./evidencia/sesiones/07-review-spec-veredicto-completo.md) · [spec resultante](./evidencia/demo/invert-match-spec.md) |
 | 🪝 Hook, en sesión real | `COMMIT BLOQUEADO` y `EDICIÓN BLOQUEADA`; el agente parte del stderr y corrige el camino | [`05a`](./evidencia/sesiones/05a-hook-veta-commit-y-edit.md) · [`05b`](./evidencia/sesiones/05b-agente-lee-stderr.md) · [`05c`](./evidencia/sesiones/05c-edicion-que-restaura-pasa.md) · [`06`](./evidencia/sesiones/06-desde-03-hook-veta.md), con la sesión abierta en `03-skills-&-agents/` |
@@ -136,6 +136,12 @@ ruta escapada y dejaba de terminar en `-spec.md`), una spec renombrada, y una sp
 los requisitos en lista, que el script aprobaba con "0 requisitos". Son los casos 14 a
 27 de la prueba.
 
+Una segunda revisión encontró que una optimización del propio arreglo era otro escape.
+Si el comando traía un `git add` o algo parecido a `-a`, el hook salteaba la versión en
+staging. Con la spec rota en staging y sana en disco, `git add otro.txt && git commit`
+y `git commit -m "fix -a flag"` commiteaban la rota. La sacamos: ahora se chequean
+siempre las dos versiones (casos 28 y 29).
+
 ### Para la demo en vivo
 
 En una sesión de Claude Code abierta en `03-skills-&-agents/`:
@@ -155,27 +161,31 @@ En una sesión de Claude Code abierta en `03-skills-&-agents/`:
   `vc-coverage.sh` la marca como rota. Esa spec está congelada y nadie la edita, así
   que el hook no la toca. Si se editara, habría que migrarla a la convención.
 - **El hook solo mira archivos `*-spec.md` fuera de `.claude/`.** Una spec con otro
-  nombre no está protegida.
+  nombre no está protegida. Distingue mayúsculas: `Demo-SPEC.md` no cuenta como spec.
 - **El chequeo de commit matchea el texto del comando.** Detecta `git commit` con
   opciones globales (`git -C x commit`, `git -c k=v commit`), con ruta (`/usr/bin/git`),
   dentro de `bash -c "…"` y de `(cd x && git commit)`. No ve un commit escondido en un
   script (`./commitear.sh`) ni los otros comandos que crean commits (`git merge`,
-  `git cherry-pick`, `git rebase`). En cambio, cualquier comando que contenga ese texto,
+  `git cherry-pick`, `git rebase`). Tampoco ve un `commit` entre comillas
+  (`git "commit"`), un `git` guardado en una variable (`$g commit`) ni un alias
+  (`git -c alias.ci=commit ci`). En cambio, cualquier comando que contenga ese texto,
   aunque sea dentro de un heredoc o de un `echo`, dispara el chequeo: es un falso
   positivo conservador que nos pasó armando esta entrega. Un commit hecho desde la
   terminal, fuera del agente, no pasa por el hook. Para eso haría falta además un
   `pre-commit` de git.
 - **Una spec rota en disco bloquea cualquier commit del agente**, aunque ese commit no
   la incluya: el hook no puede saber qué va a entrar, así que mira todas las specs
-  modificadas o nuevas. Es otro falso positivo conservador, preferible a los escapes que
-  había antes.
+  modificadas o nuevas. Por lo mismo, un `git commit -am` con la spec rota en staging
+  se veta aunque en disco ya esté corregida: hay que hacer `git add` antes. Son falsos
+  positivos conservadores, preferibles a los escapes que había antes.
 - **El gate de escritura solo ve `Edit` y `Write`.** Si el agente modifica la spec con
   `Bash` (`sed -i`, `>>`), la escritura pasa; la frena el commit.
 - **El script solo reconoce la convención.** Requisitos como encabezado y VCs en negrita
   al comienzo de la línea. Una spec que los declare en una tabla o en una lista se
   rechaza entera, con un mensaje que dice la forma esperada.
-- **El hook garantiza que exista un VC por requisito, no que el VC sea bueno.** Eso lo
-  juzga `review-spec`, y por eso son dos piezas distintas.
+- **El hook garantiza que exista un VC por requisito, no que el VC sea bueno.** Hasta
+  un VC vacío (`> **VC-1** —`) pasa el chequeo mecánico. Eso lo juzga `review-spec`, y
+  por eso son dos piezas distintas.
 - **Rutas con espacios.** El repo vive bajo una carpeta con espacios, así que
   `settings.json` cita `"$CLAUDE_PROJECT_DIR"`. El ejemplo de la cátedra no lo hace y
   acá fallaría.

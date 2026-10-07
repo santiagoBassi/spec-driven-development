@@ -22,17 +22,20 @@ Todo lo de esta carpeta salió de **correr** las piezas, no de describirlas.
 
 ## 1 · El hook bloquea, en aislamiento
 
-[`01-hook-aislado.txt`](./01-hook-aislado.txt) tiene **27 casos, 27 OK**: 18 vetos
-(`exit 2`) y 9 pasan (`exit 0`).
+[`01-hook-aislado.txt`](./01-hook-aislado.txt) tiene **29 casos, 29 OK**: 21 vetos
+(`exit 2`) y 8 pasan (`exit 0`).
 
 | Bloquea | Pasa |
 |---|---|
-| `Edit` que agrega un FR sin VC · `Write` de una spec con un VC huérfano · `Write` de una spec con los requisitos en lista · `git commit` con la spec rota en staging · `git add … && git commit` en un solo comando · `git stage … && git commit` · `bash -c "git commit -am …"` · `git commit <archivo>` · `git -c k=v commit`, `git --no-pager commit`, `git -C "dir con espacios" commit`, `/usr/bin/git commit` · `git commit` sin `-a` cuando el staging sigue roto · `git commit` sin `-a` con el disco roto (falso positivo conservador) · una spec nueva sin trackear con `git add -A && git commit` · una spec con acento en el nombre, sin trackear y en staging · una spec renombrada y rota | `Edit` que agrega FR y VC juntos · `Edit` que agrega un `#### FR-9` dentro de un bloque de código · `Edit` que cita un `**VC-1**` en prosa · archivos que no son `*-spec.md` · un `*-spec.md` bajo `.claude/` (como `agents/review-spec.md`) · `Bash` que no es un commit · `git commit -am` cuando el disco ya está corregido · `git -c k=v commit -am` con todo en orden |
+| `Edit` que agrega un FR sin VC · `Write` de una spec con un VC huérfano · `Write` de una spec con los requisitos en lista · `git commit` con la spec rota en staging · `git add … && git commit` en un solo comando · `git stage … && git commit` · `bash -c "git commit -am …"` · `git commit <archivo>` · `git -c k=v commit`, `git --no-pager commit`, `git -C "dir con espacios" commit`, `/usr/bin/git commit` · `git commit` sin `-a` cuando el staging sigue roto · `git commit` sin `-a` con el disco roto (falso positivo conservador) · una spec nueva sin trackear con `git add -A && git commit` · una spec con acento en el nombre, sin trackear y en staging · una spec renombrada y rota · `git commit -am` con el staging roto y el disco ya corregido (falso positivo conservador) · `git add` de otro archivo `&& git commit` con la spec rota en staging · `git commit` con un ` -a ` dentro del mensaje y la spec rota en staging | `Edit` que agrega FR y VC juntos · `Edit` que agrega un `#### FR-9` dentro de un bloque de código · `Edit` que cita un `**VC-1**` en prosa · archivos que no son `*-spec.md` · un `*-spec.md` bajo `.claude/` (como `agents/review-spec.md`) · `Bash` que no es un commit · `git commit` con la spec corregida en staging · `git -c k=v commit -am` con todo en orden |
 
 Para reproducirlo, desde `03-skills-&-agents/`: `evidencia/probar-hook.sh`.
 
 Los casos 1 a 13 son los de la primera versión. Los casos 14 a 27 salieron de auditar
 el hook buscándole escapes: todos pasaban (`exit 0`) con la spec rota antes de corregirlo.
+Los casos 28 y 29 salieron de una segunda revisión: el hook salteaba la versión en
+staging si el comando traía un `git add` o algo parecido a `-a`, y esa optimización era
+un escape. Al sacarla, el caso 9 pasó de `exit 0` a `exit 2`.
 
 ## 2 · El skill dispara solo, y el subagent revisa en su ventana
 
@@ -92,8 +95,8 @@ Esto no salió como lo planeamos, y por eso vale más. Para todas estas sesiones
    comando entero: cuando el hook miró el staging, el `git add` todavía no había
    corrido, y **el commit roto entró**. Lo reportó el propio agente. Los 9 casos que
    teníamos en aislamiento pasaban, y ninguno probaba esto: era exactamente un hook
-   "que se ve bien y nunca se ejercitó". **Lo corregimos.** Si el comando trae
-   `git add` o `-a`, el hook chequea la versión en disco. Sumamos los casos 6, 7 y 13 a
+   "que se ve bien y nunca se ejercitó". **Lo corregimos.** El hook chequea siempre
+   la versión en disco, además de la de staging. Sumamos los casos 6, 7 y 13 a
    `probar-hook.sh`.
 
    El hook también nos vetó a nosotros mientras armábamos esta carpeta, y eso destapó

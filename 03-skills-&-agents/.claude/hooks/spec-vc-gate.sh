@@ -82,15 +82,13 @@ case "$TOOL" in
     cd "$PROJECT_DIR" && cd "$(git rev-parse --show-toplevel)" || exit 1
     # El hook corre ANTES del comando entero, y no sabe qué va a entrar: con
     # `git add x && git commit`, `git commit -a` o `git commit <archivo>` entra lo que
-    # está en disco, no lo que está en staging. Por eso se chequea SIEMPRE la versión
-    # en disco de toda spec modificada o nueva, además de la que está en staging.
+    # está en disco, no lo que está en staging. Por eso se chequean SIEMPRE las dos
+    # versiones de toda spec modificada o nueva: la de disco y la de staging. Un
+    # `git commit -am` con el staging todavía roto se veta aunque el disco esté sano
+    # (falso positivo conservador: hay que hacer `git add` antes).
     DISK="$( { git diff -z --name-only --diff-filter=ACMR; git ls-files -z --others --exclude-standard; } \
              | specs | sort -u)"
     STAGED="$(git diff -z --cached --name-only --diff-filter=ACMR | specs)"
-    # Si el comando agrega al staging (`git add`, `git stage`, `-a`), lo de disco pisa
-    # a lo de staging: de esas specs alcanza con la versión en disco.
-    ADDS=0
-    printf '%s' "$CMD" | grep -qE 'git[[:space:]]+(add|stage)|[[:space:]](-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|$)' && ADDS=1
     FAILED=0
     while IFS= read -r f; do
       [ -n "$f" ] || continue
@@ -100,7 +98,6 @@ $DISK
 EOF_DISK
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      [ "$ADDS" = 1 ] && printf '%s\n' "$DISK" | grep -qxF -- "$f" && continue
       git show ":$f" | "$CHECK" - "$f (en staging)" 2>>"$ERR" || FAILED=1
     done <<EOF_STAGED
 $STAGED

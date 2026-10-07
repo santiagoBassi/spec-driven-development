@@ -58,8 +58,16 @@ corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
 Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
 --> exit=2 OK
 
-=== Caso 9 · git commit -am: staging roto, disco corregido (entra lo de disco) (esperado: exit 0)
---> exit=0 OK
+=== Caso 9 · git commit -am: staging roto, disco corregido (falso positivo conservador: falta el git add) (esperado: exit 2)
+COMMIT BLOQUEADO — una spec modificada no pasa la cobertura de VCs.
+vc-coverage: toolkit/sdd/demo-spec.md — OK, 4 requisitos con su VC.
+vc-coverage: toolkit/sdd/demo-spec.md (en staging) — la cobertura de VCs está rota.
+  - FR-3 no tiene VC: falta un '**VC-3**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
 
 === Caso 10 · git commit sin -a: staging sigue roto (esperado: exit 2)
 COMMIT BLOQUEADO — una spec modificada no pasa la cobertura de VCs.
@@ -201,6 +209,28 @@ Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
 
 === Caso 27 · spec renombrada y rota, en staging (git la ve como rename) (esperado: exit 2)
 COMMIT BLOQUEADO — una spec modificada no pasa la cobertura de VCs.
+vc-coverage: toolkit/sdd/renombrada-spec.md (en staging) — la cobertura de VCs está rota.
+  - FR-4 no tiene VC: falta un '**VC-4**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
+
+=== Caso 28 · git add de OTRO archivo y git commit: la spec rota sigue en staging (esperado: exit 2)
+COMMIT BLOQUEADO — una spec modificada no pasa la cobertura de VCs.
+vc-coverage: toolkit/sdd/renombrada-spec.md — OK, 5 requisitos con su VC.
+vc-coverage: toolkit/sdd/renombrada-spec.md (en staging) — la cobertura de VCs está rota.
+  - FR-4 no tiene VC: falta un '**VC-4**' que lo verifique.
+
+Regla de la spec: cada FR, BR, INV y NFR tiene un VC con su mismo ID, y cada VC
+corresponde a un requisito declarado (VC-12 ↔ FR-12, VC-BR-2 ↔ BR-2).
+Corregí la spec (skill write-spec), hacé git add y volvé a commitear.
+--> exit=2 OK
+
+=== Caso 29 · git commit con un ' -a ' dentro del mensaje: no agrega nada (esperado: exit 2)
+COMMIT BLOQUEADO — una spec modificada no pasa la cobertura de VCs.
+vc-coverage: toolkit/sdd/renombrada-spec.md — OK, 5 requisitos con su VC.
 vc-coverage: toolkit/sdd/renombrada-spec.md (en staging) — la cobertura de VCs está rota.
   - FR-4 no tiene VC: falta un '**VC-4**' que lo verifique.
 

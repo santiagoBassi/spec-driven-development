@@ -59,7 +59,7 @@ git add sdd/demo-spec.md
 caso 8 "git commit con la spec rota en staging" 2 "$(bash_ev 'git commit -m "feat: -v"')"
 
 printf '> **VC-3** — sale con código 0.\n' >> sdd/demo-spec.md
-caso 9 "git commit -am: staging roto, disco corregido (entra lo de disco)" 0 "$(bash_ev 'git commit -am "feat: -v"')"
+caso 9 "git commit -am: staging roto, disco corregido (falso positivo conservador: falta el git add)" 2 "$(bash_ev 'git commit -am "feat: -v"')"
 caso 10 "git commit sin -a: staging sigue roto" 2 "$(bash_ev 'git commit -m "feat: -v"')"
 
 git add sdd/demo-spec.md
@@ -105,3 +105,10 @@ git mv sdd/demo-spec.md sdd/renombrada-spec.md
 printf '\n#### FR-4 · Contar con -c\nDado … Cuando … Entonces …\n' >> sdd/renombrada-spec.md
 git add -A
 caso 27 "spec renombrada y rota, en staging (git la ve como rename)" 2 "$(bash_ev 'git commit -m rename')"
+
+# --- Casos 28 y 29: el escape de la optimización que salteaba el staging. ---
+# La spec queda rota en staging y corregida en disco, sin volver a agregarla.
+printf '> **VC-4** — sale con código 0.\n' >> sdd/renombrada-spec.md
+echo otro > otro.txt
+caso 28 "git add de OTRO archivo y git commit: la spec rota sigue en staging" 2 "$(bash_ev 'git add otro.txt && git commit -m x')"
+caso 29 "git commit con un ' -a ' dentro del mensaje: no agrega nada" 2 "$(bash_ev 'git commit -m "fix -a flag"')"

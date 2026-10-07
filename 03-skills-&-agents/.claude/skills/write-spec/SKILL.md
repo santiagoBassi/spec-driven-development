@@ -18,21 +18,22 @@ Convierte un pedido en una **spec SDD verificable**. Lo que este skill no deja q
    **antes** del cambio, con el comando exacto y el resultado (`N PASS, M FAIL`).
 3. **Acotá el alcance** *(alcance acotado)*: tabla **Dentro** por archivo, con qué
    cambia y dónde (`archivo:línea`); lista **Fuera** con lo vecino que tienta tocar.
-4. **Escribí los FRs atómicos**, en Dado/Cuando/Entonces: un Dado, un Cuando y un
-   resultado que se observa en **una** ejecución. Si aparece un "o", partilo en
-   `FR-Na` / `FR-Nb`.
-5. **Escribí BRs, invariantes y NFRs.** Invariantes = lo que no tiene que cambiar: la
-   suite igual que en la línea de base, solo cambian los archivos de Dentro y el
-   comportamiento existente que se toca de cerca. NFRs con número y condición.
+4. **Escribí los FRs atómicos** *(verificabilidad)*, en Dado/Cuando/Entonces: un Dado,
+   un Cuando y un resultado que se observa en **una** ejecución. Si aparece un "o",
+   partilo en `FR-Na` / `FR-Nb`.
+5. **Escribí BRs, invariantes y NFRs** *(seguridad ante regresiones)*. Invariantes = lo
+   que no tiene que cambiar: la suite igual que en la línea de base, solo cambian los
+   archivos de Dentro y el comportamiento existente que se toca de cerca. NFRs con
+   número y condición.
 6. **Escribí un VC por requisito, con el mismo ID** *(cobertura de VCs)*: `VC-12` ↔
    `FR-12`, `VC-BR-2` ↔ `BR-2`, `VC-INV-1` ↔ `INV-1`, `VC-NFR-1` ↔ `NFR-1`. Un comando,
    el exit code y la salida literal esperada.
-7. **Chequeá la cobertura con el script**, no a ojo:
+7. **Chequeá la cobertura con el script** *(cobertura de VCs, por código)*, no a ojo:
    `.claude/skills/write-spec/scripts/vc-coverage.sh sdd/<feature>-spec.md`, hasta que
    dé OK. El hook `spec-vc-gate` corre lo mismo en cada escritura y cada commit: si te
    bloquea, el stderr dice qué ID falta.
-8. **Pedí la revisión independiente**: lanzá el subagent `review-spec` con el path de
-   la spec. Con `HUECOS`, corregí y volvé a lanzarlo. Con `LISTA`, poné
+8. **Pedí la revisión** *(revisión independiente)*: lanzá el subagent `review-spec` con
+   el path de la spec. Con `HUECOS`, corregí y volvé a lanzarlo. Con `LISTA`, poné
    `Estado: revisada` en la cabecera.
 
 ## Plantilla
