@@ -86,28 +86,28 @@ Se marca `[x]` cada punto al terminarlo. Los pasos 3, 4, 5 y 7.1–7.3 no depend
 
 ### 1 · Bucket e IAM
 
-1. [ ] **(Filipo)** Subir el fixture hostil:
+1. [x] **(Filipo)** Subir el fixture hostil:
    ```sh
    gcloud storage cp notas.log gs://sdd-fardenghi-itba/fixtures/hostil/notas.log
    ```
-2. [ ] **(Filipo)** Volcar el IAM del bucket y pasar la salida completa:
+2. [x] **(Filipo)** Volcar el IAM del bucket y pasar la salida completa:
    ```sh
    gcloud storage buckets get-iam-policy gs://sdd-fardenghi-itba
    ```
-3. [ ] **(Filipo)** Listar los roles de `lectora` a nivel proyecto y pasar la salida (lo esperado es vacío):
+3. [x] **(Filipo)** Listar los roles de `lectora` a nivel proyecto y pasar la salida (lo esperado es vacío):
    ```sh
    gcloud projects get-iam-policy sat-spec-driven-development \
      --flatten="bindings[].members" --filter="bindings.members:lectora@sat-spec-driven-development.iam.gserviceaccount.com" \
      --format="table(bindings.role)"
    ```
-4. [ ] **(Filipo)** Solo si el punto 3 devolvió algún rol de Storage: moverlo al bucket y repetir 2 y 3.
+4. [x] **(Filipo)** Solo si el punto 3 devolvió algún rol de Storage: moverlo al bucket y repetir 2 y 3.
    ```sh
    gcloud projects remove-iam-policy-binding sat-spec-driven-development \
      --member="serviceAccount:lectora@sat-spec-driven-development.iam.gserviceaccount.com" --role="<el rol que apareció>"
    gcloud storage buckets add-iam-policy-binding gs://sdd-fardenghi-itba \
      --member="serviceAccount:lectora@sat-spec-driven-development.iam.gserviceaccount.com" --role="roles/storage.objectViewer"
    ```
-5. [ ] Guardar las salidas finales de 2 y 3 en `evidencia/02-iam.md`, marcando la línea con el rol de `lectora`.
+5. [x] Guardar las salidas finales de 2 y 3 en `evidencia/02-iam.md`, marcando la línea con el rol de `lectora`.
 
 **Listo cuando:** `lectora` tiene `roles/storage.objectViewer` en el bucket, nada a
 nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
