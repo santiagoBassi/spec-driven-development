@@ -1,0 +1,9 @@
+# Claves de service accounts de las identidades de prueba: nunca se versionan
+lectora.json
+sin-acceso.json
+
+# Configuración local de Claude Code
+.claude/settings.local.json
+
+# Archivos de macOS
+.DS_Store
