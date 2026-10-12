@@ -115,14 +115,14 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 ### 2 · Conectar
 
 1. [x] `.mcp.json` con `npx -y @google-cloud/storage-mcp@0.6.0`, sin `--enable-destructive-tools`.
-2. [ ] Abrir `claude` con la credencial en el entorno. Sin las variables el server usa el ADC personal y no `lectora`.
+2. [x] Abrir `claude` con la credencial en el entorno. Sin las variables el server usa el ADC personal y no `lectora`.
    ```sh
    export GOOGLE_APPLICATION_CREDENTIALS="$HOME/Documents/spec-driven-development/01-greenfield-gcsgrep/lectora.json"
    export GCSGREP_BUCKET=sdd-fardenghi-itba
    cd "$HOME/Documents/spec-driven-development/04-mcps-&-plugins" && claude
    ```
-3. [ ] Pedir: "listá las tools del server gcs". Guardar la respuesta en `evidencia/01-descubrimiento.md`, con la diferencia de nombres respecto del enunciado.
-4. [ ] Comprobar que el proceso `storage-mcp` tiene `GOOGLE_APPLICATION_CREDENTIALS` en su entorno y anotar el `client_email` en la misma evidencia.
+3. [x] Pedir: "listá las tools del server gcs". Guardar la respuesta en `evidencia/01-descubrimiento.md`, con la diferencia de nombres respecto del enunciado.
+4. [x] Comprobar que el proceso `storage-mcp` tiene `GOOGLE_APPLICATION_CREDENTIALS` en su entorno y anotar el `client_email` en la misma evidencia.
 
 **Listo cuando:** existe `evidencia/01-descubrimiento.md` y el server corre como `lectora`.
 
