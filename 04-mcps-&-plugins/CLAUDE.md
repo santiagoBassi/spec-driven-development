@@ -18,6 +18,8 @@ server MCP de GCS de solo lectura. La sesión se abre en esta carpeta
 - Una spec es un `<feature>-spec.md` en `sdd/`. Se revisa con el subagent `review-spec`.
 - **No escribas código de un cambio hasta que su spec tenga veredicto `LISTA` de
   `review-spec`.** Con `HUECOS`, se corrige la spec y se vuelve a revisar.
+- Si una spec declara prerrequisitos, `LISTA` habilita planificar: antes de implementar
+  también deben estar completos esos prerrequisitos y medida la nueva base.
 - Cada FR, BR, INV y NFR tiene un VC con su mismo ID. El hook `spec-vc-gate` lo hace
   cumplir en cada escritura de un `*-spec.md` y en cada commit.
 - Cada commit referencia la spec y los IDs que toca:

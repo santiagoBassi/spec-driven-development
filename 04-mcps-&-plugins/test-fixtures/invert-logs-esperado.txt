@@ -1,0 +1,32 @@
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:00:01 INFO Server started on port 8080
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:01:15 INFO Route registered /api/v1/status
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:02:40 INFO Route registered /api/v1/checkout
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:06:01 INFO Retry policy applied for worker-1
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:10:00 INFO Health check status OK
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:14:03 WARN Connection TIMEOUT to redis cache replica-0
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:20:11 INFO Cache fallback to memory cache
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:25:00 INFO Processing batch payment id=8842
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:30:15 ERROR Database Timeout connecting to replica-db
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:35:44 INFO Request completed 200 OK duration=45ms
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:40:12 WARN Client closed connection prematurely
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:45:00 INFO Health check status OK
+gs://sdd-fardenghi-itba/logs/app/api.log:2026-09-22 10:59:59 INFO Graceful shutdown scheduled
+gs://sdd-fardenghi-itba/logs/app/worker.log:job_id=101 queue=default status=SUCCESS duration=120ms
+gs://sdd-fardenghi-itba/logs/app/worker.log:job_id=103 queue=priority status=SUCCESS duration=45ms
+gs://sdd-fardenghi-itba/logs/app/worker.log:job_id=104 queue=batch status=ERROR reason=connection_reset retries=1
+gs://sdd-fardenghi-itba/logs/app/worker.log:job_id=105 queue=default status=TIMEOUT retries=5 action=deadletter
+gs://sdd-fardenghi-itba/logs/app/worker.log:job_id=106 queue=default status=SUCCESS duration=95ms
+gs://sdd-fardenghi-itba/logs/db/postgres.log:2026-09-22 08:00:00 UTC [1201]: [1-1] user=app,db=production LOG: checkpoint starting: time
+gs://sdd-fardenghi-itba/logs/db/postgres.log:2026-09-22 08:00:05 UTC [1201]: [2-1] user=app,db=production LOG: checkpoint complete
+gs://sdd-fardenghi-itba/logs/db/postgres.log:2026-09-22 08:30:12 UTC [1602]: [1-1] user=app,db=production ERROR: deadlock detected
+gs://sdd-fardenghi-itba/logs/db/postgres.log:2026-09-22 08:45:00 UTC [1201]: [3-1] user=app,db=production LOG: automatic vacuum of table accounts
+gs://sdd-fardenghi-itba/logs/db/redis.log:1:M 22 Sep 2026 09:00:00.000 * Ready to accept connections
+gs://sdd-fardenghi-itba/logs/db/redis.log:1:M 22 Sep 2026 09:05:00.000 * DB loaded from append only file: 0.012 seconds
+gs://sdd-fardenghi-itba/logs/db/redis.log:1:M 22 Sep 2026 09:15:00.000 * 100 clients connected, 0 clients pending
+gs://sdd-fardenghi-itba/logs/db/redis.log:1:M 22 Sep 2026 09:30:00.000 * Background saving started by pid 42
+gs://sdd-fardenghi-itba/logs/db/redis.log:1:M 22 Sep 2026 09:30:01.000 * RDB: 4 MB of memory used by copy-on-write
+gs://sdd-fardenghi-itba/logs/db/redis.log:1:M 22 Sep 2026 09:30:02.000 * Background saving terminated with success
+gs://sdd-fardenghi-itba/logs/server.log:192.168.1.50 - - [22/Sep/2026:10:00:01 -0300] "GET /index.html HTTP/1.1" 200 4521
+gs://sdd-fardenghi-itba/logs/server.log:192.168.1.51 - - [22/Sep/2026:10:01:23 -0300] "POST /login HTTP/1.1" 200 128
+gs://sdd-fardenghi-itba/logs/server.log:192.168.1.52 - - [22/Sep/2026:10:05:44 -0300] "GET /slow-query HTTP/1.1" 504 312
+gs://sdd-fardenghi-itba/logs/server.log:192.168.1.53 - - [22/Sep/2026:10:10:00 -0300] "GET /api/ping HTTP/1.1" 200 15

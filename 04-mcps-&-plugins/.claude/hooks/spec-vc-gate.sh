@@ -44,8 +44,8 @@ block() {
 }
 ERR="$(mktemp)"; trap 'rm -f "$ERR"' EXIT
 
-# Una spec es un *-spec.md fuera de .claude/ (ahí viven write-spec, review-spec.md, …).
-is_spec() { case "$1" in .claude/*|*/.claude/*) return 1 ;; *-spec.md) return 0 ;; *) return 1 ;; esac; }
+# Una spec es un *-spec.md fuera de .claude/ y de los agentes/skills empaquetados en plugin/.
+is_spec() { case "$1" in .claude/*|*/.claude/*|plugin/*/agents/*|*/plugin/*/agents/*|plugin/*/skills/*|*/plugin/*/skills/*) return 1 ;; *-spec.md) return 0 ;; *) return 1 ;; esac; }
 # Lee rutas separadas por NUL (git -z: sin comillas ni escapes, aunque tengan acentos).
 specs() { tr '\0' '\n' | while IFS= read -r f; do is_spec "$f" && printf '%s\n' "$f"; done; }
 

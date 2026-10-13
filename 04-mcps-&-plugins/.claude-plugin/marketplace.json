@@ -1,0 +1,17 @@
+{
+  "name": "sdd-course",
+  "owner": {
+    "name": "Filipo Ardenghi y Santiago Bassi"
+  },
+  "plugins": [
+    {
+      "name": "sdd-toolkit",
+      "source": "./plugin/sdd-toolkit",
+      "version": "1.0.0",
+      "description": "Toolkit SDD de gcsgrep con fixtures reales de GCS y lector restringido."
+    }
+  ],
+  "metadata": {
+    "description": "Toolkit del TP4 de Spec-Driven Development: specs de gcsgrep con fixtures GCS y herramientas restringidas."
+  }
+}

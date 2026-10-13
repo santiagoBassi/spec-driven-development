@@ -1,6 +1,6 @@
 # 04 · El muro
 
-Una sección por capa. Las capas 1, 2 y 4 se agregan en el paso 6.5.
+Pruebas del hook, modo del server y credencial. La política IAM está en `02-iam.md`.
 
 ## Capa 3 · Hook `gcs-allowlist.sh`
 
@@ -131,6 +131,66 @@ con `gcloud`.
 
 ## Capa 1 · IAM de la cuenta lectora
 
-Pendiente (paso 6.4): la prueba intenta escribir y borrar con la key de `lectora`, así que
-la corre el dueño del bucket fuera del agente. Lo que sí está en `02-iam.md`: `lectora`
-tiene solo `roles/storage.objectViewer` en el bucket y nada a nivel proyecto.
+Pruebas ejecutadas el 2026-10-13T17:41:28.715839+00:00 fuera de Claude Code, con
+`CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` por comando. No se cambió la cuenta activa
+de `gcloud`; la salida identifica la service account que atendió cada intento.
+Las rutas de las credenciales se reemplazaron por marcadores antes de guardar la evidencia.
+
+### escritura — `lectora`
+
+```console
+$ gcloud storage cp fixtures/hostil/notas.log gs://sdd-fardenghi-itba/tp4-prueba-muro/x.log
+Copying file://TP4/fixtures/hostil/notas.log to gs://sdd-fardenghi-itba/tp4-prueba-muro/x.log
+
+ERROR: [lectora@sat-spec-driven-development.iam.gserviceaccount.com] does not have permission to access b instance [sdd-fardenghi-itba] (or it may not exist): lectora@sat-spec-driven-development.iam.gserviceaccount.com does not have storage.objects.create access to the Google Cloud Storage object. Permission 'storage.objects.create' denied on resource '//storage.googleapis.com/projects/_/buckets/sdd-fardenghi-itba/objects/tp4-prueba-muro/x.log' (or it may not exist). This command is authenticated as lectora@sat-spec-driven-development.iam.gserviceaccount.com using the credentials in <credencial lectora fuera del repo>, specified by the [auth/credential_file_override] property.
+........
+exit: 1
+```
+
+### lectura sin permisos — `sin-acceso`
+
+```console
+$ gcloud storage cat gs://sdd-fardenghi-itba/logs/app/api.log
+ERROR: (gcloud.storage.cat) HTTPError 403: sin-acceso@sat-spec-driven-development.iam.gserviceaccount.com does not have storage.objects.get access to the Google Cloud Storage object. Permission 'storage.objects.get' denied on resource '//storage.googleapis.com/projects/_/buckets/sdd-fardenghi-itba/objects/logs/app/api.log' (or it may not exist). This command is authenticated as sin-acceso@sat-spec-driven-development.iam.gserviceaccount.com using the credentials in <credencial sin-acceso fuera del repo>, specified by the [auth/credential_file_override] property.
+exit: 1
+```
+
+### borrado con precondición que protege el fixture existente — `lectora`
+
+```console
+$ gcloud storage rm --if-generation-match=0 gs://sdd-fardenghi-itba/fixtures/hostil/notas.log
+Removing objects:
+
+Removing gs://sdd-fardenghi-itba/fixtures/hostil/notas.log...
+ERROR: HTTPError 403: lectora@sat-spec-driven-development.iam.gserviceaccount.com does not have storage.objects.delete access to the Google Cloud Storage object. Permission 'storage.objects.delete' denied on resource '//storage.googleapis.com/projects/_/buckets/sdd-fardenghi-itba/objects/fixtures/hostil/notas.log' (or it may not exist). This command is authenticated as lectora@sat-spec-driven-development.iam.gserviceaccount.com using the credentials in <credencial lectora fuera del repo>, specified by the [auth/credential_file_override] property.
+.........
+exit: 1
+```
+
+### HTTP de escritura (sin registrar el token) — `lectora`
+
+La CLI resumió el rechazo de creación sin imprimir su código HTTP. Para capturar
+el `403` literal se repitió un POST de prueba por la API JSON de GCS, con el token
+de `lectora` obtenido por `gcloud auth print-access-token` y mantenido solo en memoria.
+No se registraron el token ni las cabeceras de autenticación.
+
+```json
+{
+  "error": {
+    "code": 403,
+    "message": "lectora@sat-spec-driven-development.iam.gserviceaccount.com does not have storage.objects.create access to the Google Cloud Storage object. Permission 'storage.objects.create' denied on resource '//storage.googleapis.com/projects/_/buckets/sdd-fardenghi-itba/objects/tp4-prueba-muro/http-403.txt' (or it may not exist).",
+    "errors": [
+      {
+        "message": "lectora@sat-spec-driven-development.iam.gserviceaccount.com does not have storage.objects.create access to the Google Cloud Storage object. Permission 'storage.objects.create' denied on resource '//storage.googleapis.com/projects/_/buckets/sdd-fardenghi-itba/objects/tp4-prueba-muro/http-403.txt' (or it may not exist).",
+        "domain": "global",
+        "reason": "forbidden"
+      }
+    ]
+  }
+}
+```
+
+El borrado usó `--if-generation-match=0`: esa precondición protege el fixture
+existente incluso ante permisos inesperados. GCS respondió `403` por falta de
+`storage.objects.delete`, no un error de precondición. Los intentos de creación
+fueron rechazados y el fixture hostil sigue disponible.

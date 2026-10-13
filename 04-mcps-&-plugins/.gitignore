@@ -7,3 +7,6 @@ sin-acceso.json
 
 # Archivos de macOS
 .DS_Store
+
+# Caché de los helpers Python
+__pycache__/

@@ -58,13 +58,14 @@ sin el sufijo `_safe`.
 
 Comprobado el 2026-10-12T23:50Z, en la sesión abierta con las variables del paso 2.2.
 
-Entorno del proceso del server (`/proc/<pid>/environ`, filtrado a las dos variables):
+Entorno del proceso del server (`/proc/<pid>/environ`, filtrado a las dos variables;
+la ruta real de la credencial se reemplazó por un marcador):
 
 ```
 --- pid 101311 (ppid 101310) started lun oct 12 20:50:08 2026
 node /home/santiago/.npm/_npx/fc16a9b346a70fd6/node_modules/.bin/storage-mcp
 cwd: /home/santiago/Documents/spec-driven-development/04-mcps-&-plugins
-GOOGLE_APPLICATION_CREDENTIALS=/home/santiago/Documents/spec-driven-development/01-greenfield-gcsgrep/lectora.json
+GOOGLE_APPLICATION_CREDENTIALS=<credencial lectora fuera del repo>
 GCSGREP_BUCKET=sdd-fardenghi-itba
 ```
 

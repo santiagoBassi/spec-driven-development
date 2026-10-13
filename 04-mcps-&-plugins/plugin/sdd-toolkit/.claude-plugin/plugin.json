@@ -1,0 +1,30 @@
+{
+  "name": "sdd-toolkit",
+  "version": "1.0.0",
+  "description": "Specs SDD de gcsgrep con VCs basados en fixtures reales de GCS, lector restringido y hooks de cobertura y solo lectura.",
+  "author": {
+    "name": "Filipo Ardenghi y Santiago Bassi — ITBA 73.31"
+  },
+  "keywords": [
+    "sdd",
+    "gcsgrep",
+    "gcs",
+    "mcp"
+  ],
+  "userConfig": {
+    "project": {
+      "type": "string",
+      "title": "Proyecto GCP de prueba",
+      "description": "ID del proyecto de prueba que contiene el bucket; nunca producción.",
+      "required": true,
+      "sensitive": false
+    },
+    "bucket": {
+      "type": "string",
+      "title": "Bucket de fixtures",
+      "description": "Nombre del bucket de objetos sintéticos, sin gs://. La cuenta ADC debe tener objectViewer solo sobre él.",
+      "required": true,
+      "sensitive": false
+    }
+  }
+}
