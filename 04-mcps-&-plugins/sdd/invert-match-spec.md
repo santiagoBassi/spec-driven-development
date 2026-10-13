@@ -36,14 +36,14 @@ Un veredicto `LISTA` permite planificar la feature; no levanta estos prerrequisi
 | `e2e/usage_test.go` | mismo cambio de `-v` a `-x` en el caso de flag desconocido | `usage_test.go:40` |
 | `internal/search/search_test.go` | exactamente cinco tests nuevos: `TestScanInvertNoMatch` (VC-1), `TestScanInvertIgnoreCase` (VC-3), `TestScanInvertLongLine` (VC-14), `TestScanInvertMatchAfterLimit` (VC-15) y `TestScanInvertEmptyLine` (VC-16); los tests existentes no se tocan y siguen llamando `s.Scan(r, re, fn)` | archivo existente, solo se agregan funciones |
 | `internal/cli/cli_test.go` | casos `invert` (VC-1) e `invert-literal-after-double-dash` (VC-17) en `TestParseValid`. Para `invert`: args `[]string{"-v", "timeout", "gs://b/logs/"}`, error nil y `Config{Invert: true, Max: 1000, Pattern: "timeout", Location: "gs://b/logs/", Extended: false, IgnoreCase: false, LineNumber: false}` | `cli_test.go`, tabla de `TestParseValid` |
-| `e2e/invert_test.go` | archivo nuevo con exactamente estos 18 tests, uno por VC que corre `./gcsgrep` con `-v`: `TestInvertVC1`, `TestInvertVC2`, `TestInvertVC3`, `TestInvertVC4`, `TestInvertVC5`, `TestInvertVC6`, `TestInvertVC7`, `TestInvertVC8a`, `TestInvertVC8b`, `TestInvertVC9`, `TestInvertVC10`, `TestInvertVC11`, `TestInvertVC12`, `TestInvertVC13a`, `TestInvertVC13b`, `TestInvertVC13c`, `TestInvertVCBR1` y `TestInvertVCBR2`. Ningún test existente empieza con `TestInvert`. VC-INV-2 ya lo cubre `TestVC08` y VC-INV-3 el `TestVC22` modificado. VC-NFR-1 se corre como script de shell, no como test de Go | archivo nuevo |
+| `e2e/invert_test.go` | archivo nuevo con exactamente estos 19 tests, uno por VC que corre `./gcsgrep` con `-v`: `TestInvertVC1`, `TestInvertVC2`, `TestInvertVC3`, `TestInvertVC4`, `TestInvertVC5`, `TestInvertVC6`, `TestInvertVC7`, `TestInvertVC8a`, `TestInvertVC8b`, `TestInvertVC9`, `TestInvertVC10`, `TestInvertVC11`, `TestInvertVC12`, `TestInvertVC13a`, `TestInvertVC13b`, `TestInvertVC13c`, `TestInvertVCBR1`, `TestInvertVCBR2` y `TestInvertVCBR3`. Ningún test existente empieza con `TestInvert`. VC-INV-2 ya lo cubre `TestVC08` y VC-INV-3 el `TestVC22` modificado. VC-NFR-1 se corre como script de shell, no como test de Go | archivo nuevo |
 
 ### Fuera
 
 - Combinar `-v` con `-c` o `-l`: esos flags son de otra iteración y definen su propia semántica.
 - `--max` y el listado: `-v` no los toca; el tope cuenta objetos listados, no líneas (BR-3 de la spec base).
 - Un VC e2e de líneas de más de 1 MiB con `-v`: el único objeto real, `edge-cases/long_line_exceeds_1mb.log`, excede el límite de respuesta del MCP. La selección y el recorte del Scanner sí se cubren con entradas sintéticas unitarias en FR-14 y FR-15; el formato del aviso `...` en el ejecutable conserva BR-8 de la spec base.
-- Errores de lectura distintos de "el objeto no existe" (acceso denegado, red): los fija la spec base (FR-29a, FR-30a), `-v` no los cambia.
+- Errores de lectura distintos de "el objeto no existe" y "acceso denegado" (por ejemplo, red): los fija la spec base (FR-29a, FR-30a), `-v` no los cambia.
 - Los demás flags de `grep` que la spec base deja fuera: `-r`, `--include`, `-o`, `-w`, contexto y color.
 - Cambiar la clasificación de texto (BR-6 de la spec base) o el tratamiento del gzip (BR-7): `-v` los hereda.
 - `edge-cases/long_line_exceeds_1mb.log`: el lector no pudo leer su contenido (la tool devolvió "exceeds maximum allowed tokens"), así que ningún VC se apoya en él.
@@ -66,7 +66,7 @@ El server 0.6.0 no expone `generation` ni checksums: `Generation` y `MD5` salen 
 
 | Objeto | Generation | MD5 (base64) | Updated | Tipo de contenido | VCs que lo citan |
 |---|---|---|---|---|---|
-| `logs/app/api.log` | `1791914566720157` | `vahZ/f5lsfZILBzK2ouO7g==` | `2026-10-13T18:02:46.750Z` | `text/plain` | VC-1, VC-2, VC-3, VC-4, VC-12, VC-13a, VC-BR-1, VC-INV-2, VC-NFR-1 |
+| `logs/app/api.log` | `1791914566720157` | `vahZ/f5lsfZILBzK2ouO7g==` | `2026-10-13T18:02:46.750Z` | `text/plain` | VC-1, VC-2, VC-3, VC-4, VC-12, VC-13a, VC-BR-1, VC-BR-3, VC-INV-2, VC-NFR-1 |
 | `logs/app/worker.log` | `1790119237365907` | `yym80Z+JYrLZcWMxPyQYkw==` | `2026-09-22T23:20:37.370Z` | `text/plain` | VC-12 |
 | `logs/db/postgres.log` | `1790119237355295` | `n1T//eblOXT+lZeMIESFcQ==` | `2026-09-22T23:20:37.359Z` | `text/plain` | VC-12 |
 | `logs/db/redis.log` | `1790119237374465` | `nVVau7LVd8REL5zBG3RsfQ==` | `2026-09-22T23:20:37.379Z` | `text/plain` | VC-12 |
@@ -308,13 +308,23 @@ Con el mismo patrón y los mismos modificadores, cada línea de un objeto de tex
 
 ### BR-2 · `-v` no esconde los errores de lectura
 
-Un objeto puntual que no existe sigue terminando la corrida con código `2`, con o sin `-v`: invertir cambia qué líneas se imprimen, no qué se considera un error. Los demás errores de lectura los fija la spec base y quedan fuera de esta.
+Un objeto puntual que no existe sigue terminando la corrida con código `2`, con o sin `-v`: invertir cambia qué líneas se imprimen, no qué se considera un error. El acceso denegado lo fija BR-3; los demás errores de lectura los fija la spec base y quedan fuera de esta.
 
 *Fundamento:* un script que usa `-v` debe distinguir "ninguna línea" (`1`) de "no pude leer" (`2`).
 *Excepciones:* ninguna.
 
 > **VC-BR-2** — `./gcsgrep -v timeout gs://$B/data/no-existe-vc-br-2.txt` sale con código `2`, stdout vacío, y stderr es exactamente `gcsgrep: not found: gs://$B/data/no-existe-vc-br-2.txt`. `./gcsgrep timeout gs://$B/data/no-existe-vc-br-2.txt` (sin `-v`) da el mismo código, el mismo stdout vacío y el mismo stderr (FR-13a de la spec base).
 > Fixture: el objeto `data/no-existe-vc-br-2.txt` no existe en el bucket: el listado del prefijo `data/no-existe-vc-br-2` del 2026-10-13T18:09Z volvió vacío (ver Procedencia); no tiene `generation` ni `updated`.
+
+### BR-3 · `-v` no amplía ni oculta un acceso denegado
+
+Con una identidad sin permisos sobre el bucket, `-v` termina igual que sin `-v`: código `2`, sin leer ningún objeto ni imprimir líneas (BR-2 de la spec base). Invertir no convierte un acceso denegado en "ninguna línea seleccionada".
+
+*Fundamento:* el enunciado pide fixtures para el objeto sin permisos, y un `-v` que respondiera `1` o imprimiera algo ocultaría que la identidad no pudo leer.
+*Excepciones:* ninguna.
+
+> **VC-BR-3** — Con ADC = `sin-acceso` (`GOOGLE_APPLICATION_CREDENTIALS="$GCSGREP_SIN_ACCESO"`), `./gcsgrep -v timeout gs://$B/logs/app/api.log` sale con código `2`, stdout vacío, y stderr es exactamente `gcsgrep: access denied: gs://$B/logs/app/api.log`. La misma invocación sin `-v` da el mismo código, el mismo stdout vacío y el mismo stderr (BR-2 y VC-40 de la spec base). Este VC no depende de las iteraciones 2 y 3: la base explorada ya produce ese resultado sin `-v`.
+> Fixture: `logs/app/api.log` leído con la cuenta `sin-acceso` (sin rol sobre el bucket, ver `../evidencia/02-iam.md`), generation `1791914566720157`, updated `2026-10-13T18:02:46.750Z`. El 2026-10-13, `gcloud storage cat` con esa cuenta recibió `HTTPError 403` y `gcsgrep timeout` sin `-v` en la base salió con código `2` y el stderr esperado.
 
 ## Invariantes
 
@@ -360,7 +370,7 @@ Todos los tests e2e de nivel superior de `INVERT_MATCH_BASE` siguen existiendo y
 > - `jq -r 'select(.Action=="fail" or .Action=="skip") | .Test // .Package'` no imprime nada sobre ninguno de los dos JSON: ningún test ni subtest puede fallar o saltearse.
 > - Con `P='select(.Action=="pass" and .Test!=null and (.Test|contains("/")|not)) | .Test'`, `jq -r "$P" "$D/base.json" | sort` contiene todos los 21 nombres de la base explorada y coincide exactamente con la lista e2e registrada en la sección Línea de base después de completar los prerrequisitos (incluye todos los tests nuevos de sus iteraciones 2 y 3).
 > - `jq -r "$P" "$D/cambio.json" | grep -v '^TestInvert' | sort` da exactamente la misma lista de referencia que `"$D/base.json"` (incluye los tests de los prerrequisitos).
-> - `jq -r "$P" "$D/cambio.json" | grep '^TestInvert' | sort` da exactamente los 18 nombres de `e2e/invert_test.go` listados en Dentro.
+> - `jq -r "$P" "$D/cambio.json" | grep '^TestInvert' | sort` da exactamente los 19 nombres de `e2e/invert_test.go` listados en Dentro.
 >
 > Al terminar, pase o falle, `git worktree remove --force "$D/base"` deja el repositorio sin el worktree, así que el VC se puede repetir.
 

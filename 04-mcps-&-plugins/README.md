@@ -8,7 +8,7 @@ El contenido se lee por MCP; un helper de metadata completa los campos nativos
 que el server 0.6.0 omite, usando la misma credencial lectora.
 
 La demo produjo [`sdd/invert-match-spec.md`](sdd/invert-match-spec.md) para `-v`:
-28 requisitos con su VC. La spec queda en borrador y su aprobación final requiere
+29 requisitos con su VC. La spec queda en borrador y su aprobación final requiere
 completar las iteraciones 2 y 3 del TP1 (sniffing y errores de GCS), registrar
 la nueva base y medir sus suites. Se conservan esos VCs por decisión del equipo.
 La implementación de `-v` queda fuera de este paso del TP4 y sigue bloqueada
