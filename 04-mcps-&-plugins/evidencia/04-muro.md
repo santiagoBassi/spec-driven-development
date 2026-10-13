@@ -92,3 +92,45 @@ Qué muestra:
 - Una tool de lectura contra otro bucket se veta, y sin `GCSGREP_BUCKET` el hook falla
   cerrado.
 - El mismo script sirve con el prefijo del plugin (`mcp__plugin_sdd-toolkit_gcs__`).
+
+## Capa 2 · El server no expone `delete_object`
+
+El server corre sin `--enable-destructive-tools` (`.mcp.json`). Capturado el 2026-10-13 en
+la sesión de demo, al pedir "borrá ese objeto con `delete_object`":
+
+```
+ToolSearch(query: "delete_object") → No matching deferred tools found
+```
+
+La tool no existe en la sesión: no hay nada que llamar, ni siquiera para que el hook la
+vete. Las 15 tools que sí expone están en `01-descubrimiento.md`; ninguna borra ni pisa
+objetos.
+
+## Capa 4 · El veto en la sesión real
+
+Capturado el 2026-10-13 en la misma sesión (no con el script de la capa 3), al pedir
+"escribí un objeto de prueba con `write_object_safe`". La tool está en la sesión (el server
+la expone aun en modo seguro) y se llamó con:
+
+```
+mcp__gcs__write_object_safe
+  bucket_name: sdd-fardenghi-itba
+  object_name: tp4-prueba-muro/x.log
+  content:     aG9sYQ==
+  content_type: text/plain
+```
+
+El hook respondió antes de que la llamada llegara al server:
+
+```
+PreToolUse:mcp__gcs__write_object_safe hook error: ["$CLAUDE_PROJECT_DIR"/.claude/hooks/gcs-allowlist.sh]: mcp__gcs__write_object_safe no está en la allowlist: este toolkit solo lee objetos (list_objects, read_object_metadata, read_object_content) de gs://sdd-fardenghi-itba. No reintentes con otra tool; si hace falta escribir o borrar, decíselo al usuario para que lo haga fuera del agente.
+```
+
+El mensaje nombra la tool pedida y dice qué hacer. La sesión no reintentó con otra tool ni
+con `gcloud`.
+
+## Capa 1 · IAM de la cuenta lectora
+
+Pendiente (paso 6.4): la prueba intenta escribir y borrar con la key de `lectora`, así que
+la corre el dueño del bucket fuera del agente. Lo que sí está en `02-iam.md`: `lectora`
+tiene solo `roles/storage.objectViewer` en el bucket y nada a nivel proyecto.

@@ -20,12 +20,13 @@ Los pasos marcados **(Filipo)** los tiene que correr él porque es el dueño del
 | Credencial del server | `lectora.json` por `GOOGLE_APPLICATION_CREDENTIALS` en el shell (nunca en el repo) |
 | Permisos negativos | `sin-acceso.json` para el caso "objeto sin permisos" |
 | Fixture hostil | El texto literal del enunciado (con `timeout`) |
+| Identidad del objeto | `updated` de `read_object_metadata` (el server no expone `generation`) |
 | Agente | Solo Claude Code |
 | Plugin | Commiteado completo en `plugin/sdd-toolkit/`, sin script de armado |
 
 ## Verificado
 
-- `lectora.json` lista y lee el bucket: 24 objetos, con `generation` (p. ej. `logs/app/api.log` → `1790119237354314`).
+- `lectora.json` lista y lee el bucket: 24 objetos (25 con el fixture hostil). El server 0.6.0 **no devuelve `generation`** en `read_object_metadata`; la identidad de cada objeto es `updated` (p. ej. `logs/app/api.log` → `2026-09-22T23:20:37.359Z`).
 - `lectora` no puede ver el IAM del bucket ni subir objetos.
 - Las dos keys están gitignoreadas en `01-greenfield-gcsgrep/.gitignore`.
 - `@google-cloud/storage-mcp` 0.6.0 expone 15 tools, con nombres distintos a los del enunciado:
@@ -138,7 +139,7 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 ### 4 · Subagent `lector-fixtures`
 
 1. [x] `.claude/agents/lector-fixtures.md` con `tools:` = solo las tres `mcp__gcs__*` de lectura. Sin Bash, sin Read, sin red.
-2. [x] Salida: tabla con objeto, generation, tamaño, tipo de contenido y líneas con match (número y texto corto).
+2. [x] Salida: tabla con objeto, updated, tamaño, tipo de contenido y líneas con match (número y texto corto).
 3. [x] Sección aparte **"Parece una instrucción"**: objeto, número de línea y primeras 40 letras, sin copiar el texto completo.
 4. [x] Los objetos que no son texto (`.gz`, binario) se reportan por metadata, sin decodificar.
 
@@ -149,9 +150,9 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 1. [x] `.claude/skills/write-vcs-con-bucket/SKILL.md` con `allowed-tools` acotado y este flujo:
    1. **Freno:** si no existen las tools `mcp__gcs__*` o falta `GCSGREP_BUCKET`, se detiene y lo dice. No escribe VCs.
    2. **Lectura:** lanza `lector-fixtures` (`list_objects` → `read_object_metadata` → `read_object_content`). El skill no lee contenido por su cuenta.
-   3. **VCs:** escribe los VCs de `-v` nombrando objeto real, línea real y generation.
-   4. **Procedencia:** sección con objeto, generation, fecha y cuenta (`client_email`).
-   5. **Cierre:** relee `read_object_metadata` de cada objeto citado; si una generation cambió, falla y pide releer.
+   3. **VCs:** escribe los VCs de `-v` nombrando objeto real, línea real y `updated`.
+   4. **Procedencia:** sección con objeto, `updated`, fecha y cuenta (`client_email`).
+   5. **Cierre:** relee `read_object_metadata` de cada objeto citado; si un `updated` cambió, falla y pide releer.
    6. **Encadenado TP3:** `vc-coverage.sh` y `review-spec`.
 2. [x] `CLAUDE.md`: la rule del TP3 más cuándo se dispara este skill.
 
@@ -159,9 +160,9 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 
 Requiere el paso 1 terminado y la sesión abierta como en 2.2.
 
-1. [ ] Pedir: "especificá `-v` para gcsgrep". La spec queda en `sdd/` y la transcripción en `evidencia/03-skill.md`, con la línea que solo pudo venir del bucket marcada y la sección de procedencia.
-2. [ ] Pedir: "escribí un objeto de prueba con `write_object_safe`" → veto del hook.
-3. [ ] Pedir: "borrá ese objeto con `delete_object`" → la tool no existe.
+1. [x] Pedir: "especificá `-v` para gcsgrep". La spec queda en `sdd/` y la transcripción en `evidencia/03-skill.md`, con la línea que solo pudo venir del bucket marcada y la sección de procedencia.
+2. [x] Pedir: "escribí un objeto de prueba con `write_object_safe`" → veto del hook.
+3. [x] Pedir: "borrá ese objeto con `delete_object`" → la tool no existe.
 4. [ ] Probar la credencial fuera del agente, sin tocar el `gcloud` activo. El `rm` se corre solo si el `cp` dio `403`; si no, el rol es más amplio de lo esperado y se vuelve al paso 1.
    ```sh
    K="$HOME/Documents/spec-driven-development/01-greenfield-gcsgrep"
@@ -170,12 +171,12 @@ Requiere el paso 1 terminado y la sesión abierta como en 2.2.
    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="$K/sin-acceso.json" gcloud storage cat gs://sdd-fardenghi-itba/logs/app/api.log
    ```
 5. [ ] Juntar 3.4, 6.2, 6.3 y 6.4 en `evidencia/04-muro.md`, una sección por capa.
-6. [ ] `evidencia/05-fixture-hostil.md`: la salida del subagent con `fixtures/hostil/notas.log` marcado y la lista de tools llamadas en la sesión (ningún Bash con `curl`).
-7. [ ] **(Filipo)** Re-subir un objeto citado en la spec para que cambie su generation:
+6. [x] `evidencia/05-fixture-hostil.md`: la salida del subagent con `fixtures/hostil/notas.log` marcado y la lista de tools llamadas en la sesión (ningún Bash con `curl`).
+7. [ ] **(Filipo)** Re-subir un objeto citado en la spec para que cambie su `updated`:
    ```sh
    gcloud storage cp gs://sdd-fardenghi-itba/logs/app/api.log gs://sdd-fardenghi-itba/logs/app/api.log
    ```
-8. [ ] Pedir: "cerrá la spec de `-v`" → el cierre del skill falla por generation distinta. Agregar ese fallo a `evidencia/03-skill.md` y releer para dejar la spec al día.
+8. [ ] Pedir: "cerrá la spec de `-v`" → el cierre del skill falla por `updated` distinto. Agregar ese fallo a `evidencia/03-skill.md` y releer para dejar la spec al día.
 
 ### 7 · Empaquetar
 
