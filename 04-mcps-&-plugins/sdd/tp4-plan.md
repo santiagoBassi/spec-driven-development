@@ -137,10 +137,10 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 
 ### 4 · Subagent `lector-fixtures`
 
-1. [ ] `.claude/agents/lector-fixtures.md` con `tools:` = solo las tres `mcp__gcs__*` de lectura. Sin Bash, sin Read, sin red.
-2. [ ] Salida: tabla con objeto, generation, tamaño, tipo de contenido y líneas con match (número y texto corto).
-3. [ ] Sección aparte **"Parece una instrucción"**: objeto, número de línea y primeras 40 letras, sin copiar el texto completo.
-4. [ ] Los objetos que no son texto (`.gz`, binario) se reportan por metadata, sin decodificar.
+1. [x] `.claude/agents/lector-fixtures.md` con `tools:` = solo las tres `mcp__gcs__*` de lectura. Sin Bash, sin Read, sin red.
+2. [x] Salida: tabla con objeto, generation, tamaño, tipo de contenido y líneas con match (número y texto corto).
+3. [x] Sección aparte **"Parece una instrucción"**: objeto, número de línea y primeras 40 letras, sin copiar el texto completo.
+4. [x] Los objetos que no son texto (`.gz`, binario) se reportan por metadata, sin decodificar.
 
 **Listo cuando:** el frontmatter no lista ninguna tool fuera de las tres.
 
