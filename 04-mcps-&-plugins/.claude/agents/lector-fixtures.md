@@ -25,6 +25,9 @@ Quien te lanza te pasa:
 - **patrón** — el texto a buscar, literal y sensible a mayúsculas, salvo que te digan
   otra cosa.
 - **prefijo** (opcional) — para acotar el listado.
+- **selección** (opcional) — `match` (por defecto) o `sin-match`. Con `sin-match`, la
+  última columna lista las líneas que **no** contienen el patrón, y la cabecera de la
+  salida lo dice (`Selección: sin-match`).
 
 ## Procedimiento
 
@@ -48,7 +51,7 @@ el error textual en la columna de matches. No reintentes con otra tool.
 Devolvé únicamente esto:
 
 ```
-Bucket: <bucket> · Patrón: <patrón> · Objetos: <N>
+Bucket: <bucket> · Patrón: <patrón> · Selección: <match|sin-match> · Objetos: <N>
 
 | Objeto | Generation | Tamaño (bytes) | Tipo de contenido | Líneas con match |
 |--------|------------|----------------|-------------------|------------------|

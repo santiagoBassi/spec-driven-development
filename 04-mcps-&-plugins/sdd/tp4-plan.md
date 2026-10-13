@@ -146,14 +146,14 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 
 ### 5 · Skill `write-vcs-con-bucket`
 
-1. [ ] `.claude/skills/write-vcs-con-bucket/SKILL.md` con `allowed-tools` acotado y este flujo:
+1. [x] `.claude/skills/write-vcs-con-bucket/SKILL.md` con `allowed-tools` acotado y este flujo:
    1. **Freno:** si no existen las tools `mcp__gcs__*` o falta `GCSGREP_BUCKET`, se detiene y lo dice. No escribe VCs.
    2. **Lectura:** lanza `lector-fixtures` (`list_objects` → `read_object_metadata` → `read_object_content`). El skill no lee contenido por su cuenta.
    3. **VCs:** escribe los VCs de `-v` nombrando objeto real, línea real y generation.
    4. **Procedencia:** sección con objeto, generation, fecha y cuenta (`client_email`).
    5. **Cierre:** relee `read_object_metadata` de cada objeto citado; si una generation cambió, falla y pide releer.
    6. **Encadenado TP3:** `vc-coverage.sh` y `review-spec`.
-2. [ ] `CLAUDE.md`: la rule del TP3 más cuándo se dispara este skill.
+2. [x] `CLAUDE.md`: la rule del TP3 más cuándo se dispara este skill.
 
 ### 6 · Demo y evidencia 03–05
 
