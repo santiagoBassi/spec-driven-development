@@ -128,10 +128,10 @@ nivel proyecto, y `fixtures/hostil/notas.log` aparece al listar el bucket.
 
 ### 3 · Hook allowlist
 
-1. [ ] `.claude/hooks/gcs-allowlist.sh`: `PreToolUse` que lee el JSON por stdin y deja pasar solo `list_objects`, `read_object_metadata`, `read_object_content`. Veta el resto (exit 2) con un mensaje que nombra la tool pedida y dice qué hacer. Veta también las de lectura si `bucket_name` no es `$GCSGREP_BUCKET`.
-2. [ ] Copiar del TP3 `spec-vc-gate.sh`, `write-spec/` y `review-spec.md` a `.claude/`.
-3. [ ] `.claude/settings.json`: el hook del TP3 más el matcher `mcp__gcs__.*` → `gcs-allowlist.sh`.
-4. [ ] `evidencia/probar-hook.sh`: pasa al hook un JSON por caso (las 3 de lectura, `write_object_safe`, `create_bucket`, una tool inventada, otro bucket) y muestra exit code y mensaje. La salida va a `04-muro`.
+1. [x] `.claude/hooks/gcs-allowlist.sh`: `PreToolUse` que lee el JSON por stdin y deja pasar solo `list_objects`, `read_object_metadata`, `read_object_content`. Veta el resto (exit 2) con un mensaje que nombra la tool pedida y dice qué hacer. Veta también las de lectura si `bucket_name` no es `$GCSGREP_BUCKET`.
+2. [x] Copiar del TP3 `spec-vc-gate.sh`, `write-spec/` y `review-spec.md` a `.claude/`.
+3. [x] `.claude/settings.json`: el hook del TP3 más el matcher `mcp__gcs__.*` → `gcs-allowlist.sh`.
+4. [x] `evidencia/probar-hook.sh`: pasa al hook un JSON por caso (las 3 de lectura, `write_object_safe`, `create_bucket`, una tool inventada, otro bucket) y muestra exit code y mensaje. La salida va a `04-muro`.
 
 **Listo cuando:** pasan los 3 casos de lectura y se vetan los demás, incluida la tool inventada.
 
