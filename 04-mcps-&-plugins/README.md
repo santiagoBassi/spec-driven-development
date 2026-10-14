@@ -108,13 +108,22 @@ rechazos de GCS se pueden leer en `evidencia/` sin ejecutar nada.
    con la cuenta lectora. Se observaron el veto real y los `403` de creación y
    borrado; el borrado agregó una precondición que protege el fixture existente.
    [Muro](evidencia/04-muro.md), [prueba con el plugin](evidencia/06-plugin.md).
-6. **Trifecta:** la sesión principal puede tener Bash con red, una credencial
-   local y acceso a texto ajeno. La lectura de ese texto se delega al subagente,
-   que no tiene Bash, archivos locales ni herramientas de red general: solo las
-   tres lecturas MCP. Devuelve aparte las primeras 40 letras de las líneas que
+6. **Trifecta:** las tres patas son un dato privado (la credencial local y los
+   archivos de la máquina), texto ajeno (el contenido de los objetos) y un canal
+   hacia afuera (Bash con red). La sesión principal tiene la primera y la tercera.
+   Se cortó el canal hacia afuera en el lugar donde entra el texto ajeno: el
+   contenido lo lee el subagente, que no tiene Bash, archivos locales ni red, solo
+   las tres lecturas MCP. Devuelve aparte las primeras 40 letras de las líneas que
    parecen instrucciones, sin transmitir el comando completo. La demo registró
    esas líneas como datos y ningún intento de ejecutarlas
    ([fixture hostil](evidencia/05-fixture-hostil.md)).
+   **Riesgo residual:** el corte tiene dos límites. El hook permite
+   `read_object_content` a cualquier agente: que la sesión principal no la llame
+   depende de las instrucciones de `CLAUDE.md` y del skill, no de un veto. Y qué
+   línea "parece una instrucción" lo decide el modelo del lector: una que no
+   marque llega completa a la sesión principal cuando se pide `texto_completo`.
+   En ese caso el daño no alcanza al bucket (la cuenta solo lee), pero sí podría
+   alcanzar a lo que Bash tenga a mano en la máquina.
 7. **Contexto:** `/context` contabilizó **3.469 tokens** en los esquemas de las 15
    tools GCS; los dos agentes sumaron 351 y las descripciones de los dos skills
    aproximadamente 410. Los esquemas pueden quedar diferidos: ese costo no es

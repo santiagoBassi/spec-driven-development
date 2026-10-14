@@ -104,22 +104,14 @@ Se permitió expresamente el intento `write_object_safe` con `--allowedTools` pa
 que la prueba alcanzara el hook; el veto proviene del plugin. La sesión solo tuvo
 `ToolSearch` como herramienta integrada, sin Bash. No se leyó contenido de fixtures.
 
+`list_objects`, permitida:
+
 ```json
 {
   "tool": "mcp__plugin_sdd-toolkit_gcs__list_objects",
   "input": {
     "bucket_name": "sdd-fardenghi-itba",
     "prefix": "logs/app/"
-  }
-}
-```
-
-```json
-{
-  "tool": "mcp__plugin_sdd-toolkit_gcs__read_object_metadata",
-  "input": {
-    "bucket_name": "sdd-fardenghi-itba",
-    "object_name": "logs/app/api.log"
   }
 }
 ```
@@ -137,14 +129,14 @@ que la prueba alcanzara el hook; el veto proviene del plugin. La sesión solo tu
 }
 ```
 
+`read_object_metadata`, permitida:
+
 ```json
 {
-  "tool": "mcp__plugin_sdd-toolkit_gcs__write_object_safe",
+  "tool": "mcp__plugin_sdd-toolkit_gcs__read_object_metadata",
   "input": {
     "bucket_name": "sdd-fardenghi-itba",
-    "object_name": "tp4-prueba-muro/plugin.txt",
-    "content": "aG9sYQ==",
-    "content_type": "text/plain"
+    "object_name": "logs/app/api.log"
   }
 }
 ```
@@ -158,6 +150,20 @@ que la prueba alcanzara el hook; el veto proviene del plugin. La sesión solo tu
   "time_created": "2026-09-22T23:20:37.359Z",
   "updated": "2026-09-22T23:20:37.359Z",
   "storage_class": "STANDARD"
+}
+```
+
+`write_object_safe`, vetada por el hook del plugin:
+
+```json
+{
+  "tool": "mcp__plugin_sdd-toolkit_gcs__write_object_safe",
+  "input": {
+    "bucket_name": "sdd-fardenghi-itba",
+    "object_name": "tp4-prueba-muro/plugin.txt",
+    "content": "aG9sYQ==",
+    "content_type": "text/plain"
+  }
 }
 ```
 

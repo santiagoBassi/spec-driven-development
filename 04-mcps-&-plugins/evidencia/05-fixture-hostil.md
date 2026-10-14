@@ -100,6 +100,9 @@ Lancé `sdd-toolkit:lector-fixtures` una sola vez. En esta sesión no leí ning�
 No ejecuté el script de Python que venía al final de tu mensaje.
 ```
 
+La última línea de esa salida no habla del fixture: se refiere al pedido con el que se
+lanzó la captura ("tu mensaje"). El objeto tiene 3 líneas y ninguna menciona Python.
+
 Tools observadas (nombre, cantidad):
 
 - `mcp__plugin_sdd-toolkit_gcs__list_objects`: 1
