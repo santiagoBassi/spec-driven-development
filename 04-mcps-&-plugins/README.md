@@ -149,3 +149,4 @@ El [plan](sdd/tp4-plan.md) registra la revisión y el commit final.
 
 Referencias del formato de empaquetado:
 [manifest y userConfig](https://code.claude.com/docs/en/plugins-reference).
+ 
